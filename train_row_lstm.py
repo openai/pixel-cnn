@@ -20,8 +20,8 @@ parser.add_argument('--nr_resnet', type=int, default=5)
 parser.add_argument('--nr_logistic_mix', type=int, default=10)
 parser.add_argument('--nr_gpu', type=int, default=8)
 parser.add_argument('--learning_rate', type=float, default=0.003)
-parser.add_argument('--nr_filters', type=int, default=128)
-parser.add_argument('--lstm_dim', type=int, default=128)
+parser.add_argument('--nr_filters', type=int, default=96)
+parser.add_argument('--lstm_dim', type=int, default=96)
 args = parser.parse_args()
 print(args)
 
@@ -179,7 +179,7 @@ if not os.path.exists('/local_home/tim/pixel_cnn'):
 print('starting training')
 begin_all = time.time()
 with tf.Session() as sess:
-    for epoch in range(10000):
+    for epoch in range(1000):
         begin = time.time()
 
         # randomly permute
@@ -188,7 +188,7 @@ with tf.Session() as sess:
         # init
         if epoch==0:
             sess.run(initializer,{x_init: trainx[:args.init_batch_size]})
-            #saver.restore(sess, '/local_home/tim/pixel_row_cnn/params100.ckpt')
+            #saver.restore(sess, '/local_home/tim/pixel_cnn/params.ckpt')
 
         # train
         train_loss = 0.
@@ -227,5 +227,5 @@ with tf.Session() as sess:
             plotting.plt.close('all')
 
             # save params
-            saver.save(sess, '/local_home/tim/pixel_cnn/params' + str(epoch) + '.ckpt')
+            saver.save(sess, '/local_home/tim/pixel_cnn/params.ckpt')
 
