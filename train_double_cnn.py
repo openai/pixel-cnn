@@ -168,7 +168,7 @@ if not os.path.exists('/local_home/tim/pixel_cnn'):
 print('starting training')
 begin_all = time.time()
 with tf.Session() as sess:
-    for epoch in range(10000):
+    for epoch in range(1000):
         begin = time.time()
 
         # randomly permute
@@ -216,5 +216,5 @@ with tf.Session() as sess:
             plotting.plt.close('all')
 
             # save params
-            saver.save(sess, '/local_home/tim/pixel_cnn/params' + str(epoch) + '.ckpt')
+            saver.save(sess, '/local_home/tim/pixel_cnn/params.ckpt')
 
