@@ -46,7 +46,7 @@ def discretized_mix_logistic(x,l):
     log_one_minus_cdf_min = -tf.nn.softplus(min_in)
     cdf_delta = cdf_plus - cdf_min
     mid_in = inv_stdv * centered_x
-    log_pdf_mid = mid_in - log_scales - 2.*tf.nn.softplus(mid_in)
+    log_pdf_mid = -mid_in - log_scales - 2.*tf.nn.softplus(-mid_in)
     log_probs = tf.select(x < -0.999, log_cdf_plus, tf.select(x > 0.999, log_one_minus_cdf_min, tf.select(cdf_delta > 1e-3, tf.log(cdf_delta + 1e-7), log_pdf_mid - np.log(127.5))))
     log_probs = tf.reduce_sum(log_probs,3) + log_prob_from_softmax(logit_probs)
     return tf.reduce_sum(log_sum_exp(log_probs))
