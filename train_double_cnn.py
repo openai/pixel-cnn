@@ -203,7 +203,7 @@ with tf.Session() as sess:
         test_loss /= nr_batches_test_per_gpu
 
         # log
-        print("Iteration %d, time = %ds, train bits_per_dim = %.4f, test bits_per_dim = %.4f" % (epoch, time.time()-begin, train_loss, test_loss))
+        print(("Iteration %d, time = %ds, train bits_per_dim = %.4f, test bits_per_dim = %.4f" % (epoch, time.time()-begin, train_loss, test_loss)))
         sys.stdout.flush()
 
         if epoch%10 == 0:
