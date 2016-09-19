@@ -153,14 +153,14 @@ saver = tf.train.Saver()
 # load CIFAR-10 training data
 trainx, _ = cifar10_data.load('/home/tim/data/cifar-10-python')
 trainx = np.transpose(trainx, (0,2,3,1))
-nr_batches_train = int(trainx.shape[0]/args.batch_size)
-nr_batches_train_per_gpu = nr_batches_train/args.nr_gpu
+nr_batches_train = int(trainx.shape[0]//args.batch_size)
+nr_batches_train_per_gpu = nr_batches_train//args.nr_gpu
 
 # load CIFAR-10 test data
 testx, _ = cifar10_data.load('/home/tim/data/cifar-10-python', subset='test')
 testx = np.transpose(testx, (0,2,3,1))
-nr_batches_test = int(testx.shape[0]/args.batch_size)
-nr_batches_test_per_gpu = nr_batches_test/args.nr_gpu
+nr_batches_test = int(testx.shape[0]//args.batch_size)
+nr_batches_test_per_gpu = nr_batches_test//args.nr_gpu
 
 # //////////// perform training //////////////
 if not os.path.exists('/local_home/tim/pixel_cnn'):
