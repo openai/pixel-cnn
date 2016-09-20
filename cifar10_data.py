@@ -24,7 +24,7 @@ def maybe_download_and_extract(data_dir, url='http://www.cs.toronto.edu/~kriz/ci
 
 def unpickle(file):
     fo = open(file, 'rb')
-    d = cPickle.load(fo)
+    d = cPickle.load(fo, encoding='latin1')
     fo.close()
     #return {'x': d['data'].reshape((10000,3,32,32)), 'y': np.array(d['labels']).astype(np.uint8)}
     return {'x': np.cast[np.float32]((-127.5 + d['data'].reshape((10000,3,32,32)))/127.5), 'y': np.array(d['labels']).astype(np.uint8)}

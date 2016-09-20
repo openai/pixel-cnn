@@ -21,6 +21,7 @@ parser.add_argument('--nr_logistic_mix', type=int, default=10)
 parser.add_argument('--nr_gpu', type=int, default=8)
 parser.add_argument('--learning_rate', type=float, default=0.003)
 parser.add_argument('--nr_filters', type=int, default=64)
+parser.add_argument('--save_dir', type=str, default='/local_home/peter/pixel_cnn')
 args = parser.parse_args()
 print(args)
 
@@ -163,8 +164,9 @@ nr_batches_test = int(testx.shape[0]//args.batch_size)
 nr_batches_test_per_gpu = nr_batches_test//args.nr_gpu
 
 # //////////// perform training //////////////
-if not os.path.exists('/local_home/tim/pixel_cnn'):
-    os.makedirs('/local_home/tim/pixel_cnn')
+if not os.path.exists(args.save_dir):
+    os.makedirs(args.save_dir)
+
 print('starting training')
 begin_all = time.time()
 with tf.Session() as sess:
@@ -212,9 +214,9 @@ with tf.Session() as sess:
             sample_x = sample_from_model(sess)
             img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
             img = plotting.plot_img(img_tile, title='CIFAR10 samples')
-            plotting.plt.savefig('/local_home/tim/pixel_cnn/cifar10_sample' + str(epoch) + '.png')
+            plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
             plotting.plt.close('all')
 
             # save params
-            saver.save(sess, '/local_home/tim/pixel_cnn/params.ckpt')
+            saver.save(sess, args.save_dir + '/params.ckpt')
 
