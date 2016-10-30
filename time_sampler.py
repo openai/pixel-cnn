@@ -15,13 +15,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--batch_size', type=int, default=12)
 parser.add_argument('--init_batch_size', type=int, default=100)
-parser.add_argument('--sample_batch_size', type=int, default=4)
+parser.add_argument('--sample_batch_size', type=int, default=32)
 parser.add_argument('--nr_resnet', type=int, default=5)
-parser.add_argument('--nr_logistic_mix', type=int, default=10)
-parser.add_argument('--nr_gpu', type=int, default=8)
-parser.add_argument('--learning_rate', type=float, default=0.001)
+parser.add_argument('--nr_logistic_mix', type=int, default=5)
+parser.add_argument('--nr_gpu', type=int, default=1)
+parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--lr_decay', type=float, default=0.999995)
-parser.add_argument('--nr_filters', type=int, default=256)
+parser.add_argument('--nr_filters', type=int, default=128)
 parser.add_argument('--dropout_p', type=float, default=0.5)
 parser.add_argument('--save_interval', type=int, default=20)
 parser.add_argument('--data_set', type=str, default='cifar')
@@ -88,7 +88,7 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
             u = nn.aux_gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
             ul = nn.aux_gated_resnet(ul, tf.concat(3, [u, ul_list.pop()]), conv=nn.down_right_shifted_conv2d)
 
-        x_out = nn.nin(tf.nn.elu(ul),10*args.nr_logistic_mix)
+        x_out = nn.nin(nn.concat_elu(ul),10*args.nr_logistic_mix)
 
         assert len(u_list) == 0
         assert len(ul_list) == 0
@@ -153,7 +153,7 @@ with tf.device('/gpu:0'):
             grads[0][j] += grads[i][j]
 
     # training ops
-    optimizer = nn.adam_updates(all_params, grads[0], lr=tf_lr, mom1=0.95, mom2=0.9995)
+    optimizer = nn.adamax_updates(all_params, grads[0], lr=tf_lr)
 
 # convert loss to bits / dim
 bits_per_dim = loss_gen[0]/(args.nr_gpu*np.log(2.)*3*32*32*args.batch_size)
@@ -195,64 +195,16 @@ def scale_x(x):
     return np.cast[np.float32]((x - 127.5) / 127.5)
 
 # //////////// perform training //////////////
-if not os.path.exists(args.save_dir):
-    os.makedirs(args.save_dir)
-print('starting training')
-test_bpd = []
-lr = args.learning_rate
 with tf.Session() as sess:
-    for epoch in range(5000):
-        begin = time.time()
+    sess.run(initializer, {x_init: scale_x(trainx[:args.init_batch_size])})
+    for s in range(3):
+        sample_x = sample_from_model(sess) # for getting tf warmed up
 
-        # randomly permute
-        inds = rng.permutation(trainx.shape[0])
-        trainx = trainx[inds]
+    begin = time.time()
+    for epoch in range(10):
+        # generate samples from the model
+        sample_x = sample_from_model(sess)
 
-        # init
-        if epoch==0:
-            sess.run(initializer,{x_init: scale_x(trainx[:args.init_batch_size])})
-            if args.load_params:
-                saver.restore(sess, args.save_dir + '/params_' + args.data_set + '.ckpt')
+print("Time = %ds" % (0.1*(time.time()-begin)))
 
-        # train
-        train_loss_gen = 0.
-        for t in range(nr_batches_train_per_gpu):
-            lr *= args.lr_decay
-            feed_dict={tf_lr: lr}
-            for i in range(args.nr_gpu):
-                td =  t + i*nr_batches_train_per_gpu
-                feed_dict[xs[i]] = scale_x(trainx[td * args.batch_size:(td + 1) * args.batch_size])
-            l,_ = sess.run([bits_per_dim,optimizer], feed_dict)
-            train_loss_gen += l
-            sess.run(maintain_averages_op)
-        train_loss_gen /= nr_batches_train_per_gpu
-
-        # test
-        test_loss_gen = 0.
-        for t in range(nr_batches_test_per_gpu):
-            feed_dict = {}
-            for i in range(args.nr_gpu):
-                td = t + i * nr_batches_test_per_gpu
-                feed_dict[xs[i]] = scale_x(testx[td * args.batch_size:(td + 1) * args.batch_size])
-            l = sess.run(bits_per_dim_test, feed_dict)
-            test_loss_gen += l
-        test_loss_gen /= nr_batches_test_per_gpu
-        test_bpd.append(test_loss_gen)
-
-        # log
-        print("Iteration %d, time = %ds, train bits_per_dim = %.4f, test bits_per_dim = %.4f" % (epoch, time.time()-begin, train_loss_gen, test_loss_gen))
-        sys.stdout.flush()
-
-        if epoch%args.save_interval == 0:
-
-            # generate samples from the model
-            sample_x = sample_from_model(sess)
-            img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
-            img = plotting.plot_img(img_tile, title='CIFAR10 samples')
-            plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
-            plotting.plt.close('all')
-
-            # save params
-            saver.save(sess, args.save_dir + '/params_' + args.data_set + '.ckpt')
-            np.savez(args.save_dir + '/test_bpd_' + args.data_set + '.npz', test_bpd=np.array(test_bpd))
 

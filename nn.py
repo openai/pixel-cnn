@@ -6,7 +6,8 @@ from tensorflow.python.ops import control_flow_ops
 import scopes
 
 def concat_elu(x):
-    return tf.concat(3, [tf.nn.elu(x), tf.nn.elu(-x)])
+    axis = len(x.get_shape())-1
+    return tf.concat(axis, [tf.nn.elu(x), tf.nn.elu(-x)])
 
 def int_shape(x):
     s = x.get_shape()
@@ -23,7 +24,7 @@ def log_prob_from_softmax(x):
     m = tf.reduce_max(x, axis, keep_dims=True)
     return x - m - tf.log(tf.reduce_sum(tf.exp(x-m), axis, keep_dims=True))
 
-def discretized_mix_logistic(x,l):
+def discretized_mix_logistic_loss(x,l,sum_all=True):
     xs = int_shape(x)
     ls = int_shape(l)
     nr_mix = ls[-1] / 10
@@ -46,10 +47,13 @@ def discretized_mix_logistic(x,l):
     log_one_minus_cdf_min = -tf.nn.softplus(min_in)
     cdf_delta = cdf_plus - cdf_min
     mid_in = inv_stdv * centered_x
-    log_pdf_mid = -mid_in - log_scales - 2.*tf.nn.softplus(-mid_in)
+    log_pdf_mid = mid_in - log_scales - 2.*tf.nn.softplus(mid_in)
     log_probs = tf.select(x < -0.999, log_cdf_plus, tf.select(x > 0.999, log_one_minus_cdf_min, tf.select(cdf_delta > 1e-3, tf.log(cdf_delta + 1e-7), log_pdf_mid - np.log(127.5))))
     log_probs = tf.reduce_sum(log_probs,3) + log_prob_from_softmax(logit_probs)
-    return tf.reduce_sum(log_sum_exp(log_probs))
+    if sum_all:
+        return -tf.reduce_sum(log_sum_exp(log_probs))
+    else:
+        return -tf.reduce_sum(log_sum_exp(log_probs),[1,2])
 
 def sample_from_discretized_mix_logistic(l,nr_mix):
     ls = int_shape(l)
@@ -245,33 +249,29 @@ def nin(x, num_units, **kwargs):
     return tf.reshape(x, s[:-1]+[num_units])
 
 @scopes.add_arg_scope
-def resnet(x, nonlinearity=concat_elu, conv=conv2d, **kwargs):
+def resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, **kwargs):
     num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity, **kwargs)
-    c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1, **kwargs)
+    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
+    c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1)
     return x+c2
 
 @scopes.add_arg_scope
-def gated_resnet(x, nonlinearity=concat_elu, conv=conv2d, **kwargs):
+def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity, **kwargs)
-    c2 = nin(c1, num_filters*2, nonlinearity=None, init_scale=0.1, **kwargs)
+    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
+    if dropout_p > 0:
+        c1 = tf.nn.dropout(c1, keep_prob=1. - dropout_p)
+    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
     c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
     return x+c3
 
 @scopes.add_arg_scope
-def gated_resnet(x, nonlinearity=concat_elu, conv=conv2d, **kwargs):
+def aux_gated_resnet(x, u, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity, **kwargs)
-    c2 = nin(c1, num_filters*2, nonlinearity=None, init_scale=0.1, **kwargs)
-    c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
-    return x+c3
-
-@scopes.add_arg_scope
-def aux_gated_resnet(x, u, nonlinearity=concat_elu, conv=conv2d, **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=None, **kwargs) + nin(nonlinearity(u), num_filters, nonlinearity=None, **kwargs)
-    c2 = nin(nonlinearity(c1), num_filters*2, nonlinearity=None, init_scale=0.1, **kwargs)
+    c1 = nonlinearity(conv(nonlinearity(x), num_filters, nonlinearity=None) + nin(nonlinearity(u), num_filters, nonlinearity=None))
+    if dropout_p>0:
+        c1 = tf.nn.dropout(c1, keep_prob=1.-dropout_p)
+    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
     c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
     return x+c3
 
