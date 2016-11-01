@@ -1,4 +1,3 @@
-import cPickle
 import os
 import sys
 import tarfile
@@ -24,7 +23,12 @@ def maybe_download_and_extract(data_dir, url='http://www.cs.toronto.edu/~kriz/ci
 
 def unpickle(file):
     fo = open(file, 'rb')
-    d = cPickle.load(fo)
+    if (sys.version_info >= (3, 0)):
+        import pickle
+        d = pickle.load(fo, encoding='latin1')
+    else:
+        import cPickle
+        d = cPickle.load(fo)
     fo.close()
     return {'x': d['data'].reshape((10000,3,32,32)), 'y': np.array(d['labels']).astype(np.uint8)}
 

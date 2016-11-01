@@ -27,7 +27,7 @@ def log_prob_from_softmax(x):
 def discretized_mix_logistic_loss(x,l,sum_all=True):
     xs = int_shape(x)
     ls = int_shape(l)
-    nr_mix = ls[-1] / 10
+    nr_mix = int(ls[-1] / 10)
     logit_probs = l[:,:,:,:nr_mix]
     l = tf.reshape(l[:,:,:,nr_mix:], xs + [nr_mix*3])
     means = l[:,:,:,:,:nr_mix]
@@ -285,14 +285,14 @@ def right_shift(x):
 
 @scopes.add_arg_scope
 def down_shifted_conv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
-    x = tf.pad(x, [[0,0],[filter_size[0]-1,0], [(filter_size[1]-1)/2,(filter_size[1]-1)/2],[0,0]])
+    x = tf.pad(x, [[0,0],[filter_size[0]-1,0], [int((filter_size[1]-1)/2),int((filter_size[1]-1)/2)],[0,0]])
     return conv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
 
 @scopes.add_arg_scope
 def down_shifted_deconv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
     x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
     xs = int_shape(x)
-    return x[:,:(xs[1]-filter_size[0]+1),(filter_size[1]-1)/2:(xs[2]-(filter_size[1]-1)/2),:]
+    return x[:,:(xs[1]-filter_size[0]+1),int((filter_size[1]-1)/2):(xs[2]-int((filter_size[1]-1)/2)),:]
 
 @scopes.add_arg_scope
 def down_right_shifted_conv2d(x, num_filters, filter_size=[2,2], stride=[1,1], **kwargs):
