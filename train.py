@@ -18,6 +18,7 @@ import tensorflow as tf
 import pixel_cnn_pp.nn as nn
 import pixel_cnn_pp.plotting as plotting
 import pixel_cnn_pp.scopes as scopes
+from pixel_cnn_pp.model import model_spec
 import data.cifar10_data as cifar10_data
 
 # -----------------------------------------------------------------------------
@@ -52,73 +53,15 @@ print('input args:\n', json.dumps(vars(args), indent=4, separators=(',',':'))) #
 rng = np.random.RandomState(args.seed)
 tf.set_random_seed(args.seed)
 
-# -----------------------------------------------------------------------------
-def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
-    counters = {}
-    with scopes.arg_scope([nn.conv2d, nn.deconv2d, nn.gated_resnet, nn.aux_gated_resnet, nn.dense], counters=counters, init=init, ema=ema, dropout_p=dropout_p):
-
-        # ////////// up pass through pixelCNN ////////
-        xs = nn.int_shape(x)
-        x_pad = tf.concat(3,[x,tf.ones(xs[:-1]+[1])]) # add channel of ones to distinguish image from padding later on
-        u_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 3]))] # stream for pixels above
-        ul_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[1,3])) + \
-                   nn.right_shift(nn.down_right_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2,1]))] # stream for up and to the left
-        
-        for rep in range(args.nr_resnet):
-            u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
-            ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-        
-        u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-        ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-
-        for rep in range(args.nr_resnet):
-            u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
-            ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-
-        u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-        ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-
-        for rep in range(args.nr_resnet):
-            u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
-            ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-
-        # /////// down pass ////////
-        u = u_list.pop()
-        ul = ul_list.pop()
-        for rep in range(args.nr_resnet):
-            u = nn.aux_gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
-            ul = nn.aux_gated_resnet(ul, tf.concat(3,[u, ul_list.pop()]), conv=nn.down_right_shifted_conv2d)
-
-        u = nn.down_shifted_deconv2d(u, num_filters=args.nr_filters, stride=[2, 2])
-        ul = nn.down_right_shifted_deconv2d(ul, num_filters=args.nr_filters, stride=[2, 2])
-
-        for rep in range(args.nr_resnet+1):
-            u = nn.aux_gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
-            ul = nn.aux_gated_resnet(ul, tf.concat(3, [u, ul_list.pop()]), conv=nn.down_right_shifted_conv2d)
-
-        u = nn.down_shifted_deconv2d(u, num_filters=args.nr_filters, stride=[2, 2])
-        ul = nn.down_right_shifted_deconv2d(ul, num_filters=args.nr_filters, stride=[2, 2])
-
-        for rep in range(args.nr_resnet+1):
-            u = nn.aux_gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
-            ul = nn.aux_gated_resnet(ul, tf.concat(3, [u, ul_list.pop()]), conv=nn.down_right_shifted_conv2d)
-
-        x_out = nn.nin(tf.nn.elu(ul),10*args.nr_logistic_mix)
-
-        assert len(u_list) == 0
-        assert len(ul_list) == 0
-
-        return x_out
-# -----------------------------------------------------------------------------
-
 # create the model
+model_opt = { 'nr_resnet': args.nr_resnet, 'nr_filters': args.nr_filters, 'nr_logistic_mix': args.nr_logistic_mix }
 model = tf.make_template('model', model_spec)
 
 # data
 x_init = tf.placeholder(tf.float32, shape=(args.init_batch_size, 32, 32, 3))
 
 # run once for data dependent initialization of parameters
-gen_par = model(x_init, init=True)
+gen_par = model(x_init, init=True, dropout_p=args.dropout_p, **model_opt)
 
 # get list of all params
 all_params = tf.trainable_variables()
@@ -129,7 +72,7 @@ maintain_averages_op = tf.group(ema.apply(all_params))
 
 # sample from the model
 x_sample = tf.placeholder(tf.float32, shape=(args.sample_batch_size, 32, 32, 3))
-gen_par = model(x_sample, ema=ema, dropout_p=0.)
+gen_par = model(x_sample, ema=ema, dropout_p=0, **model_opt)
 new_x_gen = nn.sample_from_discretized_mix_logistic(gen_par, args.nr_logistic_mix)
 def sample_from_model(sess):
     x_gen = np.zeros((args.sample_batch_size,32,32,3), dtype=np.float32)
@@ -150,14 +93,14 @@ for i in range(args.nr_gpu):
     with tf.device('/gpu:%d' % i):
 
         # train
-        gen_par = model(xs[i])
+        gen_par = model(xs[i], ema=None, dropout_p=args.dropout_p, **model_opt)
         loss_gen.append(nn.discretized_mix_logistic_loss(xs[i], gen_par))
 
         # gradients
         grads.append(tf.gradients(loss_gen[i], all_params))
 
         # test
-        gen_par = model(xs[i], ema=ema, dropout_p=0.)
+        gen_par = model(xs[i], ema=ema, dropout_p=0., **model_opt)
         loss_gen_test.append(nn.discretized_mix_logistic_loss(xs[i], gen_par))
 
 # add gradients together and get training updates
