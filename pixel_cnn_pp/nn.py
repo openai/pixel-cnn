@@ -13,19 +13,21 @@ def int_shape(x):
     return list(map(int, x.get_shape()))
 
 def log_sum_exp(x):
+    """ numerically stable log_sum_exp implementation that prevents overflow """
     axis = len(x.get_shape())-1
     m = tf.reduce_max(x, axis)
     m2 = tf.reduce_max(x, axis, keep_dims=True)
     return m + tf.log(tf.reduce_sum(tf.exp(x-m2), axis))
 
 def log_prob_from_softmax(x):
+    """ numerically stable log_softmax implementation that prevents overflow """
     axis = len(x.get_shape())-1
     m = tf.reduce_max(x, axis, keep_dims=True)
     return x - m - tf.log(tf.reduce_sum(tf.exp(x-m), axis, keep_dims=True))
 
 def discretized_mix_logistic_loss(x,l,sum_all=True):
-    xs = int_shape(x)
-    ls = int_shape(l)
+    xs = int_shape(x) # true image (i.e. labels) to regress to, e.g. (B,32,32,3)
+    ls = int_shape(l) # predicted distribution, e.g. (B,32,32,100)
     nr_mix = int(ls[-1] / 10)
     logit_probs = l[:,:,:,:nr_mix]
     l = tf.reshape(l[:,:,:,nr_mix:], xs + [nr_mix*3])
