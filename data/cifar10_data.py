@@ -40,12 +40,12 @@ def unpickle(file):
 def load(data_dir, subset='train'):
     maybe_download_and_extract(data_dir)
     if subset=='train':
-        train_data = [unpickle(os.path.join(data_dir,'cifar-10-batches-py/data_batch_' + str(i))) for i in range(1,6)]
+        train_data = [unpickle(os.path.join(data_dir,'cifar-10-batches-py','data_batch_' + str(i))) for i in range(1,6)]
         trainx = np.concatenate([d['x'] for d in train_data],axis=0)
         trainy = np.concatenate([d['y'] for d in train_data],axis=0)
         return trainx, trainy
     elif subset=='test':
-        test_data = unpickle(os.path.join(data_dir,'cifar-10-batches-py/test_batch'))
+        test_data = unpickle(os.path.join(data_dir,'cifar-10-batches-py','test_batch'))
         testx = test_data['x']
         testy = test_data['y']
         return testx, testy
@@ -69,10 +69,11 @@ class DataLoader(object):
 
         # create temporary storage for the data, if not yet created
         if not os.path.exists(data_dir):
+            print('creating folder', data_dir)
             of.makedirs(data_dir)
 
         # load CIFAR-10 training data to RAM
-        self.data, labels = load(data_dir + '/cifar-10-python', subset=subset)
+        self.data, labels = load(os.path.join(data_dir,'cifar-10-python'), subset=subset)
         self.data = np.transpose(self.data, (0,2,3,1)) # (N,3,32,32) -> (N,32,32,3)
         
         self.p = 0 # pointer to where we are in iteration
