@@ -23,27 +23,27 @@ import cifar10_data
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
 # data I/O
-parser.add_argument('--save_dir', type=str, default='/local_home/tim/pixel_cnn')
-parser.add_argument('--data_dir', type=str, default='/home/tim/data')
-parser.add_argument('--save_interval', type=int, default=20)
-parser.add_argument('--data_set', type=str, default='cifar')
-parser.add_argument('--load_params', type=int, default=0)
+parser.add_argument('-i', '--data_dir', type=str, default='/home/tim/data', help='Location for the dataset')
+parser.add_argument('-o', '--save_dir', type=str, default='/local_home/tim/pixel_cnn', help='Location for parameter checkpoints and samples')
+parser.add_argument('-d', '--data_set', type=str, default='cifar', help='Can be either cifar|imagenet')
+parser.add_argument('--save_interval', type=int, default=20, help='Every how many epochs to write checkpoint/samples?')
+parser.add_argument('--load_params', type=int, default=0, help='Restore training from previous model checkpoint? 1 = Yes, 0 = No')
 # model
-parser.add_argument('--nr_resnet', type=int, default=5)
-parser.add_argument('--nr_filters', type=int, default=256)
-parser.add_argument('--nr_logistic_mix', type=int, default=10)
+parser.add_argument('--nr_resnet', type=int, default=5, help='Number of residual blocks per stage of the model')
+parser.add_argument('--nr_filters', type=int, default=256, help='Number of filters to use across the model. Higher = larger model.')
+parser.add_argument('--nr_logistic_mix', type=int, default=10, help='Number of logistic components in the mixture. Higher = more flexible model')
 # optimization
-parser.add_argument('--learning_rate', type=float, default=0.001)
-parser.add_argument('--lr_decay', type=float, default=0.999995)
-parser.add_argument('--batch_size', type=int, default=12)
-parser.add_argument('--init_batch_size', type=int, default=100)
-parser.add_argument('--dropout_p', type=float, default=0.5)
-parser.add_argument('--nr_gpu', type=int, default=8)
+parser.add_argument('-l', '--learning_rate', type=float, default=0.001, help='Base learning rate')
+parser.add_argument('--lr_decay', type=float, default=0.999995, help='Learning rate decay, applied every step of the optimization')
+parser.add_argument('-b', '--batch_size', type=int, default=12, help='Batch size during training per GPU')
+parser.add_argument('--init_batch_size', type=int, default=100, help='How much data to use for data-dependent initialization.')
+parser.add_argument('--dropout_p', type=float, default=0.5, help='Dropout strength (i.e. 1 - keep_prob). 0 = No dropout, higher = more dropout.')
+parser.add_argument('-g', '--nr_gpu', type=int, default=8, help='How many GPUs to distribute the training across?')
 # evaluation
-parser.add_argument('--sample_batch_size', type=int, default=4)
-parser.add_argument('--polyak_decay', type=float, default=0.9995)
+parser.add_argument('--sample_batch_size', type=int, default=4, help='How many images to process in paralell during sampling?')
+parser.add_argument('-p', '--polyak_decay', type=float, default=0.9995, help='Expoential decay rate of the sum of previous model iterates during Polyak averaging')
 # reproducibility
-parser.add_argument('--seed', type=int, default=1)
+parser.add_argument('--seed', type=int, default=1, help='Random seed to use')
 args = parser.parse_args()
 print('input args:\n', json.dumps(vars(args), indent=4, separators=(',',':'))) # pretty print args
 
@@ -259,7 +259,7 @@ with tf.Session() as sess:
         print("Iteration %d, time = %ds, train bits_per_dim = %.4f, test bits_per_dim = %.4f" % (epoch, time.time()-begin, train_loss_gen, test_loss_gen))
         sys.stdout.flush()
 
-        if epoch%args.save_interval == 0:
+        if epoch % args.save_interval == 0:
 
             # generate samples from the model
             sample_x = sample_from_model(sess)
