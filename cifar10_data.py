@@ -1,3 +1,8 @@
+"""
+Utilities for downloading and unpacking the CIFAR-10 dataset, originally published
+by Krizhevsky et al. and hosted here: https://www.cs.toronto.edu/~kriz/cifar.html
+"""
+
 import os
 import sys
 import tarfile

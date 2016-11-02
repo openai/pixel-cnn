@@ -1,43 +1,58 @@
-import argparse
-import time
-import sys
+"""
+Trains a Pixel-CNN++ generative model on CIFAR-10 or Tiny ImageNet data.
+Uses multiple GPUs, indicated by the flag --nr-gpu
+
+Example usage:
+CUDA_VISIBLE_DEVICES=0,1,2,3 python train_double_cnn.py --nr_gpu 4
+"""
+
 import os
+import sys
+import time
+import json
+import argparse
+
 import numpy as np
 import tensorflow as tf
-import scopes
+
 import nn
+import scopes
 import plotting
 import cifar10_data
-sys.setrecursionlimit(10000)
 
-# settings
+# -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--seed', type=int, default=1)
-parser.add_argument('--batch_size', type=int, default=12)
-parser.add_argument('--init_batch_size', type=int, default=100)
-parser.add_argument('--sample_batch_size', type=int, default=4)
-parser.add_argument('--nr_resnet', type=int, default=5)
-parser.add_argument('--nr_logistic_mix', type=int, default=10)
-parser.add_argument('--nr_gpu', type=int, default=8)
-parser.add_argument('--learning_rate', type=float, default=0.001)
-parser.add_argument('--lr_decay', type=float, default=0.999995)
-parser.add_argument('--nr_filters', type=int, default=256)
-parser.add_argument('--dropout_p', type=float, default=0.5)
-parser.add_argument('--save_interval', type=int, default=20)
-parser.add_argument('--data_set', type=str, default='cifar')
+# data I/O
 parser.add_argument('--save_dir', type=str, default='/local_home/tim/pixel_cnn')
 parser.add_argument('--data_dir', type=str, default='/home/tim/data')
+parser.add_argument('--save_interval', type=int, default=20)
+parser.add_argument('--data_set', type=str, default='cifar')
 parser.add_argument('--load_params', type=int, default=0)
+# model
+parser.add_argument('--nr_resnet', type=int, default=5)
+parser.add_argument('--nr_filters', type=int, default=256)
+parser.add_argument('--nr_logistic_mix', type=int, default=10)
+# optimization
+parser.add_argument('--learning_rate', type=float, default=0.001)
+parser.add_argument('--lr_decay', type=float, default=0.999995)
+parser.add_argument('--batch_size', type=int, default=12)
+parser.add_argument('--init_batch_size', type=int, default=100)
+parser.add_argument('--dropout_p', type=float, default=0.5)
+parser.add_argument('--nr_gpu', type=int, default=8)
+# evaluation
+parser.add_argument('--sample_batch_size', type=int, default=4)
 parser.add_argument('--polyak_decay', type=float, default=0.9995)
+# reproducibility
+parser.add_argument('--seed', type=int, default=1)
 args = parser.parse_args()
-print(args)
+print('input args:\n', json.dumps(vars(args), indent=4, separators=(',',':'))) # pretty print args
 
-
-# fix random seed
+# -----------------------------------------------------------------------------
+# fix random seed for reproducibility
 rng = np.random.RandomState(args.seed)
 tf.set_random_seed(args.seed)
 
-# pixelCNN
+# -----------------------------------------------------------------------------
 def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
     counters = {}
     with scopes.arg_scope([nn.conv2d, nn.deconv2d, nn.gated_resnet, nn.aux_gated_resnet, nn.dense], counters=counters, init=init, ema=ema, dropout_p=dropout_p):
@@ -94,6 +109,7 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         assert len(ul_list) == 0
 
         return x_out
+# -----------------------------------------------------------------------------
 
 model = tf.make_template('model', model_spec)
 
@@ -171,7 +187,7 @@ if args.data_set == 'cifar':
     trainx, trainy = cifar10_data.load(args.data_dir + '/cifar-10-python')
     trainx = np.transpose(trainx, (0,2,3,1))
     nr_batches_train = int(trainx.shape[0]/args.batch_size)
-    nr_batches_train_per_gpu = nr_batches_train/args.nr_gpu
+    nr_batches_train_per_gpu = int(nr_batches_train/args.nr_gpu)
 
     # load CIFAR-10 test data
     testx, testy = cifar10_data.load(args.data_dir + '/cifar-10-python', subset='test')
@@ -184,7 +200,7 @@ elif args.data_set == 'imagenet':
     imgnet_data = np.load(args.data_dir + '/small_imagenet/imgnet_32x32.npz')
     trainx = imgnet_data['trainx']
     nr_batches_train = int(trainx.shape[0] / args.batch_size)
-    nr_batches_train_per_gpu = nr_batches_train / args.nr_gpu
+    nr_batches_train_per_gpu = int(nr_batches_train / args.nr_gpu)
     testx = imgnet_data['testx']
     nr_batches_test = int(testx.shape[0] / args.batch_size)
     nr_batches_test_per_gpu = nr_batches_test / args.nr_gpu
