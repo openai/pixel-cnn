@@ -63,11 +63,11 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         u_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 3]))] # stream for pixels above
         ul_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[1,3])) + \
                    nn.right_shift(nn.down_right_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2,1]))] # stream for up and to the left
-
+        
         for rep in range(args.nr_resnet):
             u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
             ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-
+        
         u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
         ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
 
