@@ -15,10 +15,10 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-import nn
-import scopes
-import plotting
-import cifar10_data
+import pixel_cnn_pp.nn
+import pixel_cnn_pp.scopes
+import pixel_cnn_pp.plotting
+import data.cifar10_data
 
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
