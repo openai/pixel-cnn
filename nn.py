@@ -1,3 +1,7 @@
+"""
+Various tensorflow utilities
+"""
+
 import warnings
 import numpy as np
 import tensorflow as tf
@@ -5,13 +9,8 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_ops
 import scopes
 
-def concat_elu(x):
-    axis = len(x.get_shape())-1
-    return tf.concat(axis, [tf.nn.elu(x), tf.nn.elu(-x)])
-
 def int_shape(x):
-    s = x.get_shape()
-    return [int(si) for si in s]
+    return list(map(int, x.get_shape()))
 
 def log_sum_exp(x):
     axis = len(x.get_shape())-1
@@ -83,27 +82,6 @@ def get_vars_maybe_avg(var_names, ema, **kwargs):
     for vn in var_names:
         vars.append(get_var_maybe_avg(vn, ema, **kwargs))
     return vars
-
-def adamax_updates(params, cost_or_grads, lr=0.001, mom1=0.9, mom2=0.999):
-    updates = []
-    if type(cost_or_grads) is not list:
-        grads = tf.gradients(cost_or_grads, params)
-    else:
-        grads = cost_or_grads
-    for p, g in zip(params, grads):
-        mg = tf.Variable(tf.zeros(p.get_shape()), p.name + '_adamax_mg')
-        if mom1>0:
-            v = tf.Variable(tf.zeros(p.get_shape()), p.name + '_adamax_v')
-            v_t = mom1*v + (1. - mom1)*g
-            updates.append(v.assign(v_t))
-        else:
-            v_t = g
-        mg_t = tf.maximum(mom2*mg + 1e-8, tf.abs(g))
-        g_t = v_t / mg_t
-        p_t = p - lr * g_t
-        updates.append(mg.assign(mg_t))
-        updates.append(p.assign(p_t))
-    return control_flow_ops.group(*updates)
 
 def adam_updates(params, cost_or_grads, lr=0.001, mom1=0.9, mom2=0.999):
     updates = []
@@ -243,6 +221,7 @@ def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlin
 
 @scopes.add_arg_scope
 def nin(x, num_units, **kwargs):
+    """ a network in network layer (1x1 CONV) """
     s = int_shape(x)
     x = tf.reshape(x, [np.prod(s[:-1]),s[-1]])
     x = dense(x, num_units, **kwargs)
@@ -304,69 +283,3 @@ def down_right_shifted_deconv2d(x, num_filters, filter_size=[2,2], stride=[1,1],
     x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
     xs = int_shape(x)
     return x[:,:(xs[1]-filter_size[0]+1):,:(xs[2]-filter_size[1]+1),:]
-
-@scopes.add_arg_scope
-def lstm(x, state=None, num_units=None, num_out=None, nonlinearity=tf.tanh, counters={}, init=False, ema=None, **kwargs):
-    if state is not None:
-        num_units = int(state[0].get_shape()[1])
-        num_out = int(state[1].get_shape()[1])
-    xs = int_shape(x)
-    if len(xs)==3:
-        batch_size = xs[0]
-        num_steps = xs[1]
-        num_input = xs[2]
-        process_single_step = False
-    else:
-        batch_size = xs[0]
-        num_input = xs[1]
-        process_single_step = True
-
-    # get params
-    name = get_name('lstm', counters)
-    with tf.variable_scope(name):
-        initial_lstm_c = get_var_maybe_avg('initial_lstm_c', ema, dtype=tf.float32, initializer=tf.zeros(num_units), trainable=True)
-        initial_lstm_h = get_var_maybe_avg('initial_lstm_h', ema, dtype=tf.float32, initializer=tf.zeros(num_out), trainable=True)
-        V = get_var_maybe_avg('V', ema, shape=[num_input + num_out, 4 * num_units], dtype=tf.float32, initializer=tf.random_normal_initializer(0, 0.05), trainable=True)
-        g = get_var_maybe_avg('g', ema, dtype=tf.float32, initializer=tf.ones(4*num_units), trainable=True)
-        b = get_var_maybe_avg('b', ema, dtype=tf.float32, initializer=tf.zeros(4*num_units), trainable=True)
-        if init:
-            initial_lstm_c = initial_lstm_c.initialized_value()
-            initial_lstm_h = initial_lstm_h.initialized_value()
-            V = V.initialized_value()
-            g = g.initialized_value()
-            b = b.initialized_value()
-        scaler = g / tf.sqrt(tf.reduce_sum(tf.square(V), [0]))
-
-    # get state
-    if state is None:
-        state = (tf.reshape(initial_lstm_c, [1, num_units]) + tf.zeros([batch_size,num_units]),
-                 tf.reshape(initial_lstm_h, [1, num_out]) + tf.zeros([batch_size, num_out]))
-
-    # single step of LSTM
-    lstm_c, lstm_h = state
-    if process_single_step:
-        x_combined = tf.concat(1, [x,lstm_h])
-        y = tf.matmul(x_combined, V)
-        y = tf.reshape(scaler,[1,4*num_units])*y + tf.reshape(b,[1,4*num_units])
-        i, f, o, pc = tf.split(1, 4, y)
-        lstm_c = tf.nn.sigmoid(f)*lstm_c + tf.nn.sigmoid(i)*nonlinearity(pc)
-        lstm_h = tf.nn.sigmoid(o)*nonlinearity(lstm_c)
-
-        return lstm_c, lstm_h
-
-    else:
-        lstm_h_list = []
-        W = V * tf.reshape(scaler,[1,4*num_units])
-        W_x = W[:num_input,:]
-        W_h = W[num_input:,:]
-        x_times_W = tf.reshape(tf.matmul(tf.reshape(x,[xs[0]*xs[1],xs[2]]),W_x) + tf.reshape(b, [1, 4 * num_units]), [xs[0], xs[1], 4*num_units])
-
-        for t in range(num_steps):
-            h_times_W = tf.matmul(lstm_h, W_h)
-            i, f, o, pc = tf.split(1, 4, h_times_W + x_times_W[:,t,:])
-            lstm_c = tf.nn.sigmoid(f) * lstm_c + tf.nn.sigmoid(i) * nonlinearity(pc)
-            lstm_h = tf.nn.sigmoid(o) * lstm_c
-            lstm_h_list.append(tf.reshape(lstm_h,[batch_size,1,num_out]))
-
-        return tf.concat(1,lstm_h_list)
-
