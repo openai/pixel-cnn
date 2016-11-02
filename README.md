@@ -12,9 +12,12 @@ Our work builds on PixelCNNs that were originally proposed in [van der Oord et a
 in June 2016. PixelCNNs are a class of powerful generative models with tractable 
 likelihood that are also easy to sample from. The core convolutional neural network
 computes a probability distribution over a value of one pixel conditioned on the values
-of pixels to the left and above it. Here are example samples from a model
+of pixels to the left and above it. Below are example samples from a model
 trained on CIFAR-10 that achieves **2.92 bits per dimension** (compared to 3.03 of 
 the PixelCNN in van der Oord et al.):
+
+Samples from the model (**left**) and samples from a model that is conditioned
+on the CIFAR-10 class labels (**right**):
 
 ![Improved PixelCNN papers](data/pixelcnn_samples.png)
 
