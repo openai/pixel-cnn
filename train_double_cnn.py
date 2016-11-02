@@ -25,7 +25,7 @@ parser.add_argument('--nr_filters', type=int, default=256)
 parser.add_argument('--dropout_p', type=float, default=0.5)
 parser.add_argument('--save_interval', type=int, default=20)
 parser.add_argument('--data_set', type=str, default='cifar')
-parser.add_argument('--save_dir', type=str, default='/local_home/tim/pixel_cnn')
+parser.add_argument('--save_dir', type=str, default='./log')
 parser.add_argument('--data_dir', type=str, default='/home/tim/data')
 parser.add_argument('--load_params', type=int, default=0)
 parser.add_argument('--polyak_decay', type=float, default=0.9995)
@@ -48,11 +48,11 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         u_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 3]))] # stream for pixels above
         ul_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[1,3])) + \
                    nn.right_shift(nn.down_right_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2,1]))] # stream for up and to the left
-
+        
         for rep in range(args.nr_resnet):
             u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
             ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-
+        
         u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
         ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
 
@@ -171,23 +171,23 @@ if args.data_set == 'cifar':
     trainx, trainy = cifar10_data.load(args.data_dir + '/cifar-10-python')
     trainx = np.transpose(trainx, (0,2,3,1))
     nr_batches_train = int(trainx.shape[0]/args.batch_size)
-    nr_batches_train_per_gpu = nr_batches_train/args.nr_gpu
+    nr_batches_train_per_gpu = int(nr_batches_train/args.nr_gpu)
 
     # load CIFAR-10 test data
     testx, testy = cifar10_data.load(args.data_dir + '/cifar-10-python', subset='test')
     testx = np.transpose(testx, (0,2,3,1))
     nr_batches_test = int(testx.shape[0]/args.batch_size)
-    nr_batches_test_per_gpu = nr_batches_test/args.nr_gpu
+    nr_batches_test_per_gpu = int(nr_batches_test/args.nr_gpu)
 
 elif args.data_set == 'imagenet':
     # download van Oord et al.'s small imagenet data set and convert using png_to_npz.py
     imgnet_data = np.load(args.data_dir + '/small_imagenet/imgnet_32x32.npz')
     trainx = imgnet_data['trainx']
     nr_batches_train = int(trainx.shape[0] / args.batch_size)
-    nr_batches_train_per_gpu = nr_batches_train / args.nr_gpu
+    nr_batches_train_per_gpu = int(nr_batches_train / args.nr_gpu)
     testx = imgnet_data['testx']
     nr_batches_test = int(testx.shape[0] / args.batch_size)
-    nr_batches_test_per_gpu = nr_batches_test / args.nr_gpu
+    nr_batches_test_per_gpu = int(nr_batches_test / args.nr_gpu)
 
 
 # input to pixelCNN is scaled to [-1,1]
