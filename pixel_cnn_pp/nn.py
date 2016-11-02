@@ -2,12 +2,12 @@
 Various tensorflow utilities
 """
 
-import warnings
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_ops
-import scopes
+
+from pixel_cnn_pp.scopes import add_arg_scope
 
 def int_shape(x):
     return list(map(int, x.get_shape()))
@@ -115,7 +115,7 @@ def get_name(layer_name, counters):
     counters[layer_name] += 1
     return name
 
-@scopes.add_arg_scope
+@add_arg_scope
 def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
     name = get_name('dense', counters)
     with tf.variable_scope(name):
@@ -147,7 +147,7 @@ def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=Fals
                 x = nonlinearity(x)
             return x
 
-@scopes.add_arg_scope
+@add_arg_scope
 def conv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
     name = get_name('conv2d', counters)
     with tf.variable_scope(name):
@@ -180,7 +180,7 @@ def conv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinea
                 x = nonlinearity(x)
             return x
 
-@scopes.add_arg_scope
+@add_arg_scope
 def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
     name = get_name('deconv2d', counters)
     xs = int_shape(x)
@@ -219,7 +219,7 @@ def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlin
                 x = nonlinearity(x)
             return x
 
-@scopes.add_arg_scope
+@add_arg_scope
 def nin(x, num_units, **kwargs):
     """ a network in network layer (1x1 CONV) """
     s = int_shape(x)
@@ -227,14 +227,14 @@ def nin(x, num_units, **kwargs):
     x = dense(x, num_units, **kwargs)
     return tf.reshape(x, s[:-1]+[num_units])
 
-@scopes.add_arg_scope
+@add_arg_scope
 def resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
     c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1)
     return x+c2
 
-@scopes.add_arg_scope
+@add_arg_scope
 def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
@@ -244,7 +244,7 @@ def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs)
     c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
     return x+c3
 
-@scopes.add_arg_scope
+@add_arg_scope
 def aux_gated_resnet(x, u, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = nonlinearity(conv(nonlinearity(x), num_filters, nonlinearity=None) + nin(nonlinearity(u), num_filters, nonlinearity=None))
@@ -262,23 +262,23 @@ def right_shift(x):
     xs = int_shape(x)
     return tf.concat(2,[tf.zeros([xs[0],xs[1],1,xs[3]]), x[:,:,:xs[2]-1,:]])
 
-@scopes.add_arg_scope
+@add_arg_scope
 def down_shifted_conv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
     x = tf.pad(x, [[0,0],[filter_size[0]-1,0], [int((filter_size[1]-1)/2),int((filter_size[1]-1)/2)],[0,0]])
     return conv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
 
-@scopes.add_arg_scope
+@add_arg_scope
 def down_shifted_deconv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
     x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
     xs = int_shape(x)
     return x[:,:(xs[1]-filter_size[0]+1),int((filter_size[1]-1)/2):(xs[2]-int((filter_size[1]-1)/2)),:]
 
-@scopes.add_arg_scope
+@add_arg_scope
 def down_right_shifted_conv2d(x, num_filters, filter_size=[2,2], stride=[1,1], **kwargs):
     x = tf.pad(x, [[0,0],[filter_size[0]-1, 0], [filter_size[1]-1, 0],[0,0]])
     return conv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
 
-@scopes.add_arg_scope
+@add_arg_scope
 def down_right_shifted_deconv2d(x, num_filters, filter_size=[2,2], stride=[1,1], **kwargs):
     x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
     xs = int_shape(x)

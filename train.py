@@ -15,10 +15,10 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-import pixel_cnn_pp.nn
-import pixel_cnn_pp.scopes
-import pixel_cnn_pp.plotting
-import data.cifar10_data
+import pixel_cnn_pp.nn as nn
+import pixel_cnn_pp.plotting as plotting
+import pixel_cnn_pp.scopes as scopes
+import data.cifar10_data as cifar10_data
 
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
@@ -111,6 +111,7 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         return x_out
 # -----------------------------------------------------------------------------
 
+# create the model
 model = tf.make_template('model', model_spec)
 
 # data
