@@ -23,8 +23,8 @@ import cifar10_data
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
 # data I/O
-parser.add_argument('-i', '--data_dir', type=str, default='/home/tim/data', help='Location for the dataset')
-parser.add_argument('-o', '--save_dir', type=str, default='/local_home/tim/pixel_cnn', help='Location for parameter checkpoints and samples')
+parser.add_argument('-i', '--data_dir', type=str, default='/tmp/pxpp/data', help='Location for the dataset')
+parser.add_argument('-o', '--save_dir', type=str, default='/tmp/pxpp/save', help='Location for parameter checkpoints and samples')
 parser.add_argument('-d', '--data_set', type=str, default='cifar', help='Can be either cifar|imagenet')
 parser.add_argument('-t', '--save_interval', type=int, default=20, help='Every how many epochs to write checkpoint/samples?')
 parser.add_argument('-r', '--load_params', type=int, default=0, help='Restore training from previous model checkpoint? 1 = Yes, 0 = No')
@@ -193,7 +193,7 @@ if args.data_set == 'cifar':
     testx, testy = cifar10_data.load(args.data_dir + '/cifar-10-python', subset='test')
     testx = np.transpose(testx, (0,2,3,1))
     nr_batches_test = int(testx.shape[0]/args.batch_size)
-    nr_batches_test_per_gpu = nr_batches_test/args.nr_gpu
+    nr_batches_test_per_gpu = int(nr_batches_test/args.nr_gpu)
 
 elif args.data_set == 'imagenet':
     # download van Oord et al.'s small imagenet data set and convert using png_to_npz.py
@@ -203,7 +203,7 @@ elif args.data_set == 'imagenet':
     nr_batches_train_per_gpu = int(nr_batches_train / args.nr_gpu)
     testx = imgnet_data['testx']
     nr_batches_test = int(testx.shape[0] / args.batch_size)
-    nr_batches_test_per_gpu = nr_batches_test / args.nr_gpu
+    nr_batches_test_per_gpu = int(nr_batches_test / args.nr_gpu)
 
 
 # input to pixelCNN is scaled to [-1,1]
