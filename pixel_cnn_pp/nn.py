@@ -266,7 +266,7 @@ def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs)
     if dropout_p > 0:
         c1 = tf.nn.dropout(c1, keep_prob=1. - dropout_p)
     c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
+    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
     return x+c3
 
 @add_arg_scope
@@ -276,7 +276,7 @@ def aux_gated_resnet(x, u, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **
     if dropout_p>0:
         c1 = tf.nn.dropout(c1, keep_prob=1.-dropout_p)
     c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = c2[:,:,:,:num_filters] * tf.nn.sigmoid(c2[:,:,:,num_filters:])
+    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
     return x+c3
 
 ''' utilities for shifting the image around, efficient alternative to masking convolutions '''
