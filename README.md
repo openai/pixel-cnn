@@ -24,7 +24,7 @@ on the CIFAR-10 class labels (**right**):
 This code supports multi-GPU training of our improved PixelCNN on [CIFAR-10](https://www.cs.toronto.edu/~kriz/cifar.html)
 and [Small ImageNet](http://image-net.org/small/download.php), but is easy to adapt
 for additional datasets. Training on a machine with 8 Maxwell TITAN X GPUs achieves
-3.0 bits per dimension in about a day and takes approximately 5 days to converge to 2.92.
+3.0 bits per dimension in about 10 hours and it takes approximately 5 days to converge to 2.92.
 
 ## Setup
 
