@@ -2,11 +2,11 @@
 # pixel-cnn++
 
 This is a Python3 / [Tensorflow](https://www.tensorflow.org/) implementation 
-of [PixelCNN++](TODO_arxiv_link), as described in the following 
+of [PixelCNN++](http://104.155.136.4:3000/pdf?id=BJrFC6ceg), as described in the following 
 paper:
 
-**PixelCNN++: Discretized Logistic Mixture Likelihood and Other Modifications**, by
-Tim et al.
+**PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications, by
+Tim Salimans, Andrej Karpathy, Xi Chen, Diederik P. Kingma, and Yaroslav Bulatov.
 
 Our work builds on PixelCNNs that were originally proposed in [van der Oord et al.](https://arxiv.org/abs/1606.05328) 
 in June 2016. PixelCNNs are a class of powerful generative models with tractable 
@@ -55,10 +55,6 @@ the flag `--nr_gpu` accordingly.
 in the `data/` folder. You have to write an analogous data iterator object for
 your own dataset and the code should work well from there.
 
-## Pretrained Model
-
-You can find our 2.92 model checkpoint [here]().
-
 ## FAQ
 
 **Is the conditional code included?** Not right now, but we plan to add it.
@@ -68,9 +64,10 @@ You can find our 2.92 model checkpoint [here]().
 If you find this code useful please cite us in your work:
 
 ```
-@inproceedings{Johnson2016Perceptual,
-  title={PixelCNN++: Discretized Logistic Mixture Likelihood and Other Modifications},
-  author={Salimans, Tim and et al},
+@inproceedings{Salimans2016PixeCNN,
+  title={PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications},
+  author={Tim Salimans and Andrej Karpathy and Xi Chen and Diederik P. Kingma and Yaroslav Bulatov},
+  booktitle={Submitted to ICLR 2017},
   year={2016}
 }
 ```

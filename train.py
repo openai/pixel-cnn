@@ -32,7 +32,7 @@ parser.add_argument('-t', '--save_interval', type=int, default=20, help='Every h
 parser.add_argument('-r', '--load_params', type=int, default=0, help='Restore training from previous model checkpoint? 1 = Yes, 0 = No')
 # model
 parser.add_argument('-q', '--nr_resnet', type=int, default=5, help='Number of residual blocks per stage of the model')
-parser.add_argument('-n', '--nr_filters', type=int, default=256, help='Number of filters to use across the model. Higher = larger model.')
+parser.add_argument('-n', '--nr_filters', type=int, default=192, help='Number of filters to use across the model. Higher = larger model.')
 parser.add_argument('-m', '--nr_logistic_mix', type=int, default=10, help='Number of logistic components in the mixture. Higher = more flexible model')
 # optimization
 parser.add_argument('-l', '--learning_rate', type=float, default=0.001, help='Base learning rate')
@@ -43,7 +43,7 @@ parser.add_argument('-p', '--dropout_p', type=float, default=0.5, help='Dropout 
 parser.add_argument('-x', '--max_epochs', type=int, default=5000, help='How many epochs to run in total?')
 parser.add_argument('-g', '--nr_gpu', type=int, default=8, help='How many GPUs to distribute the training across?')
 # evaluation
-parser.add_argument('--sample_batch_size', type=int, default=4, help='How many images to process in paralell during sampling?')
+parser.add_argument('--sample_batch_size', type=int, default=16, help='How many images to process in paralell during sampling?')
 parser.add_argument('--polyak_decay', type=float, default=0.9995, help='Exponential decay rate of the sum of previous model iterates during Polyak averaging')
 # reproducibility
 parser.add_argument('-s', '--seed', type=int, default=1, help='Random seed to use')
