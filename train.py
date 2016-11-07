@@ -29,11 +29,13 @@ parser.add_argument('-i', '--data_dir', type=str, default='/tmp/pxpp/data', help
 parser.add_argument('-o', '--save_dir', type=str, default='/tmp/pxpp/save', help='Location for parameter checkpoints and samples')
 parser.add_argument('-d', '--data_set', type=str, default='cifar', help='Can be either cifar|imagenet')
 parser.add_argument('-t', '--save_interval', type=int, default=20, help='Every how many epochs to write checkpoint/samples?')
-parser.add_argument('-r', '--load_params', type=int, default=0, help='Restore training from previous model checkpoint? 1 = Yes, 0 = No')
+parser.add_argument('-r', '--load_params', dest='load_params', action='store_true', help='Select to restore training from previous model checkpoint.')
 # model
 parser.add_argument('-q', '--nr_resnet', type=int, default=5, help='Number of residual blocks per stage of the model')
-parser.add_argument('-n', '--nr_filters', type=int, default=192, help='Number of filters to use across the model. Higher = larger model.')
-parser.add_argument('-m', '--nr_logistic_mix', type=int, default=10, help='Number of logistic components in the mixture. Higher = more flexible model')
+parser.add_argument('-n', '--nr_filters', type=int, default=128, help='Number of filters to use across the model. Higher = larger model.')
+parser.add_argument('-m', '--nr_logistic_mix', type=int, default=5, help='Number of logistic components in the mixture. Higher = more flexible model')
+parser.add_argument('-z', '--save_memory', dest='save_memory', action='store_true', help='Select to trade off additional computation for additional memory')
+parser.set_defaults(save_memory=False)
 # optimization
 parser.add_argument('-l', '--learning_rate', type=float, default=0.001, help='Base learning rate')
 parser.add_argument('-e', '--lr_decay', type=float, default=0.999995, help='Learning rate decay, applied every step of the optimization')
@@ -43,7 +45,7 @@ parser.add_argument('-p', '--dropout_p', type=float, default=0.5, help='Dropout 
 parser.add_argument('-x', '--max_epochs', type=int, default=5000, help='How many epochs to run in total?')
 parser.add_argument('-g', '--nr_gpu', type=int, default=8, help='How many GPUs to distribute the training across?')
 # evaluation
-parser.add_argument('--sample_batch_size', type=int, default=16, help='How many images to process in paralell during sampling?')
+parser.add_argument('--sample_batch_size', type=int, default=100, help='How many images to process in paralell during sampling?')
 parser.add_argument('--polyak_decay', type=float, default=0.9995, help='Exponential decay rate of the sum of previous model iterates during Polyak averaging')
 # reproducibility
 parser.add_argument('-s', '--seed', type=int, default=1, help='Random seed to use')
@@ -62,7 +64,7 @@ test_data = DataLoader(args.data_dir, 'test', args.batch_size * args.nr_gpu, shu
 obs_shape = train_data.get_observation_size() # e.g. a tuple (32,32,3)
 
 # create the model
-model_opt = { 'nr_resnet': args.nr_resnet, 'nr_filters': args.nr_filters, 'nr_logistic_mix': args.nr_logistic_mix }
+model_opt = { 'nr_resnet': args.nr_resnet, 'nr_filters': args.nr_filters, 'nr_logistic_mix': args.nr_logistic_mix, 'save_memory': args.save_memory }
 model = tf.make_template('model', model_spec)
 
 x_init = tf.placeholder(tf.float32, shape=(args.init_batch_size,) + obs_shape)

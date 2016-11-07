@@ -5,9 +5,13 @@ Various tensorflow utilities
 import numpy as np
 import tensorflow as tf
 from pixel_cnn_pp.scopes import add_arg_scope
+from tensorflow.python.framework import function as tff
 
 def int_shape(x):
     return list(map(int, x.get_shape()))
+
+def concat_elu(x, axis=3):
+    return tf.nn.elu(tf.concat(axis,[x,-x]))
 
 def log_sum_exp(x):
     """ numerically stable log_sum_exp implementation that prevents overflow """
@@ -135,178 +139,339 @@ def get_name(layer_name, counters):
     counters[layer_name] += 1
     return name
 
-@add_arg_scope
-def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
-    ''' fully connected layer '''
-    name = get_name('dense', counters)
-    with tf.variable_scope(name):
+# get params, using data based initialization & (optionally) weight normalization, and using moving averages
+def get_params(layer_name, x=None, init=False, ema=None, use_W=True, use_g=True, use_b=True,
+               f=tf.matmul, weight_norm=True, init_scale=1., filter_size=None, num_units=None):
+    params = {}
+    with tf.variable_scope(layer_name):
         if init:
-            # data based initialization of parameters
-            V = tf.get_variable('V', [int(x.get_shape()[1]),num_units], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0])
-            x_init = tf.matmul(x, V_norm)
-            m_init, v_init = tf.nn.moments(x_init, [0])
-            scale_init = init_scale/tf.sqrt(v_init + 1e-10)
-            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init, trainable=True)
-            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init*scale_init, trainable=True)
-            x_init = tf.reshape(scale_init,[1,num_units])*(x_init-tf.reshape(m_init,[1,num_units]))
-            if nonlinearity is not None:
-                x_init = nonlinearity(x_init)
-            return x_init
+            xs = int_shape(x)
+            if num_units is None:
+                num_units = xs[-1]
+            norm_axes = [i for i in np.arange(len(xs) - 1)]
+
+            # weights
+            if use_W:
+                if filter_size is not None:
+                    V = tf.get_variable('V', filter_size + [xs[-1], num_units], tf.float32,
+                                        tf.random_normal_initializer(0, 0.05), trainable=True)
+                else:
+                    V = tf.get_variable('V', [xs[-1], num_units], tf.float32,
+                                    tf.random_normal_initializer(0, 0.05), trainable=True)
+                if weight_norm:
+                    W = tf.nn.l2_normalize(V.initialized_value(), [i for i in np.arange(len(V.get_shape())-1)])
+                else:
+                    W = V.initialized_value()
+
+            # moments for normalization
+            if use_W:
+                x_init = f(x, W)
+            else:
+                x_init = x
+            m_init, v_init = tf.nn.moments(x_init, norm_axes)
+
+            # scale
+            init_g = init_scale / tf.sqrt(v_init)
+            if use_g:
+                g = tf.get_variable('g', dtype=tf.float32, initializer=init_g, trainable=True).initialized_value()
+                if use_W:
+                    W *= tf.reshape(g, [1]*(len(W.get_shape())-1)+[num_units])
+                else: # g is used directly if there are no weights
+                    params['g'] = g
+                m_init *= init_g
+            elif use_W and not weight_norm: # init is the same as when using weight norm
+                W = V.assign(tf.reshape(init_g, [1]*(len(W.get_shape())-1) + [num_units]) * W)
+                m_init *= init_g
+
+            # (possibly) scaled weights
+            if use_W:
+                params['W'] = W
+
+            # bias
+            if use_b:
+                b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init, trainable=True).initialized_value()
+                params['b'] = b
 
         else:
-            V,g,b = get_vars_maybe_avg(['V','g','b'], ema)
-            tf.assert_variables_initialized([V,g,b])
+            # get variables, use the exponential moving average if provided
+            if use_b:
+                params['b'] = get_var_maybe_avg('b', ema)
+            if use_g:
+                g = get_var_maybe_avg('g', ema)
+                if not use_W: # g is used directly if there are no weights
+                    params['g'] = g
+            if use_W:
+                V = get_var_maybe_avg('V', ema)
+                Vs = int_shape(V)
+                if weight_norm:
+                    W = tf.nn.l2_normalize(V, [i for i in np.arange(len(Vs)-1)])
+                else:
+                    W = V
+                if use_g:
+                    W *= tf.reshape(g, [1]*(len(Vs)-1) + [Vs[-1]])
+                params['W'] = W
 
-            # use weight normalization (Salimans & Kingma, 2016)
-            x = tf.matmul(x, V)
-            scaler = g/tf.sqrt(tf.reduce_sum(tf.square(V),[0]))
-            x = tf.reshape(scaler,[1,num_units])*x + tf.reshape(b,[1,num_units])
+    return params
 
-            # apply nonlinearity
-            if nonlinearity is not None:
-                x = nonlinearity(x)
-            return x
-
-@add_arg_scope
-def conv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
-    ''' convolutional layer '''
-    name = get_name('conv2d', counters)
-    with tf.variable_scope(name):
-        if init:
-            # data based initialization of parameters
-            V = tf.get_variable('V', filter_size+[int(x.get_shape()[-1]),num_filters], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0,1,2])
-            x_init = tf.nn.conv2d(x, V_norm, [1]+stride+[1], pad)
-            m_init, v_init = tf.nn.moments(x_init, [0,1,2])
-            scale_init = init_scale/tf.sqrt(v_init + 1e-8)
-            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init, trainable=True)
-            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init*scale_init, trainable=True)
-            x_init = tf.reshape(scale_init,[1,1,1,num_filters])*(x_init-tf.reshape(m_init,[1,1,1,num_filters]))
-            if nonlinearity is not None:
-                x_init = nonlinearity(x_init)
-            return x_init
-
-        else:
-            V, g, b = get_vars_maybe_avg(['V', 'g', 'b'], ema)
-            tf.assert_variables_initialized([V,g,b])
-
-            # use weight normalization (Salimans & Kingma, 2016)
-            W = tf.reshape(g,[1,1,1,num_filters])*tf.nn.l2_normalize(V,[0,1,2])
-
-            # calculate convolutional layer output
-            x = tf.nn.bias_add(tf.nn.conv2d(x, W, [1]+stride+[1], pad), b)
-
-            # apply nonlinearity
-            if nonlinearity is not None:
-                x = nonlinearity(x)
-            return x
-
-@add_arg_scope
-def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, **kwargs):
-    ''' transposed convolutional layer '''
-    name = get_name('deconv2d', counters)
-    xs = int_shape(x)
-    if pad=='SAME':
-        target_shape = [xs[0], xs[1]*stride[0], xs[2]*stride[1], num_filters]
-    else:
-        target_shape = [xs[0], xs[1]*stride[0] + filter_size[0]-1, xs[2]*stride[1] + filter_size[1]-1, num_filters]
-    with tf.variable_scope(name):
-        if init:
-            # data based initialization of parameters
-            V = tf.get_variable('V', filter_size+[num_filters,int(x.get_shape()[-1])], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
-            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0,1,3])
-            x_init = tf.nn.conv2d_transpose(x, V_norm, target_shape, [1]+stride+[1], padding=pad)
-            m_init, v_init = tf.nn.moments(x_init, [0,1,2])
-            scale_init = init_scale/tf.sqrt(v_init + 1e-8)
-            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init, trainable=True)
-            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init*scale_init, trainable=True)
-            x_init = tf.reshape(scale_init,[1,1,1,num_filters])*(x_init-tf.reshape(m_init,[1,1,1,num_filters]))
-            if nonlinearity is not None:
-                x_init = nonlinearity(x_init)
-            return x_init
-
-        else:
-            V, g, b = get_vars_maybe_avg(['V', 'g', 'b'], ema)
-            tf.assert_variables_initialized([V,g,b])
-
-            # use weight normalization (Salimans & Kingma, 2016)
-            W = tf.reshape(g,[1,1,num_filters,1])*tf.nn.l2_normalize(V,[0,1,3])
-
-            # calculate convolutional layer output
-            x = tf.nn.conv2d_transpose(x, W, target_shape, [1]+stride+[1], padding=pad)
-            x = tf.nn.bias_add(x, b)
-
-            # apply nonlinearity
-            if nonlinearity is not None:
-                x = nonlinearity(x)
-            return x
-
-@add_arg_scope
-def nin(x, num_units, **kwargs):
-    """ a network in network layer (1x1 CONV) """
-    s = int_shape(x)
-    x = tf.reshape(x, [np.prod(s[:-1]),s[-1]])
-    x = dense(x, num_units, **kwargs)
-    return tf.reshape(x, s[:-1]+[num_units])
-
-''' meta-layers consisting of multiple base layers '''
-
-@add_arg_scope
-def resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
-    c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1)
-    return x+c2
-
-@add_arg_scope
-def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
-    if dropout_p > 0:
-        c1 = tf.nn.dropout(c1, keep_prob=1. - dropout_p)
-    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
-    return x+c3
-
-@add_arg_scope
-def aux_gated_resnet(x, u, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = nonlinearity(conv(nonlinearity(x), num_filters, nonlinearity=None) + nin(nonlinearity(u), num_filters, nonlinearity=None))
-    if dropout_p>0:
-        c1 = tf.nn.dropout(c1, keep_prob=1.-dropout_p)
-    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
-    return x+c3
 
 ''' utilities for shifting the image around, efficient alternative to masking convolutions '''
 
 def down_shift(x):
-    xs = int_shape(x)
-    return tf.concat(1,[tf.zeros([xs[0],1,xs[2],xs[3]]), x[:,:xs[1]-1,:,:]])
+    return tf.pad(x[:,:-1,:,:], [[0,0],[1,0],[0,0],[0,0]])
 
 def right_shift(x):
+    return tf.pad(x[:,:,:-1,:], [[0,0],[0,0],[1,0],[0,0]])
+
+def up_shift(x):
+    return tf.pad(x[:,1:,:,:], [[0,0],[0,1],[0,0],[0,0]])
+
+def left_shift(x):
+    return tf.pad(x[:,:,1:,:], [[0,0],[0,0],[0,1],[0,0]])
+
+
+''' convolution / deconvolution wrappers supporting shifting the output: efficient alternative to masking '''
+
+def _conv2d(x, W, stride, shift=None, filter_size=None):
+    if filter_size is None:
+        filter_size = int_shape(W)
+    if shift is None:
+        return tf.nn.conv2d(x, W, [1] + stride + [1], 'SAME')
+    elif shift == 'down':
+        x = tf.pad(x, [[0, 0], [filter_size[0] - 1, 0], [int((filter_size[1] - 1) / 2), int((filter_size[1] - 1) / 2)], [0, 0]])
+    elif shift == 'down_right':
+        x = tf.pad(x, [[0, 0], [filter_size[0] - 1, 0], [filter_size[1] - 1, 0], [0, 0]])
+    elif shift == 'up':
+        x = tf.pad(x, [[0, 0], [0, filter_size[0] - 1], [int((filter_size[1] - 1) / 2), int((filter_size[1] - 1) / 2)], [0, 0]])
+    elif shift == 'up_left':
+        x = tf.pad(x, [[0, 0], [0, filter_size[0] - 1], [0, filter_size[1] - 1], [0, 0]])
+    else:
+        raise('shift= ' + str(shift) + ' is a not supported')
+    return tf.nn.conv2d(x, W, [1] + stride + [1], 'VALID')
+
+def _deconv2d(x, W, stride, shift=None, xs=None, filter_size=None):
+    if xs is None:
+        xs = int_shape(x)
+    if filter_size is None:
+        filter_size = int_shape(W)
+    num_filters = filter_size[-1]
+    W_flipped = tf.transpose(W, [0,1,3,2])
+    if shift is None:
+        ts = [xs[0], xs[1] * stride[0], xs[2] * stride[1], num_filters]
+        return tf.nn.conv2d_transpose(x, W_flipped, ts, [1] + stride + [1], padding='SAME')
+    else:
+        ts = [xs[0], xs[1] * stride[0] + filter_size[0] - 1, xs[2] * stride[1] + filter_size[1] - 1, num_filters]
+        x = tf.nn.conv2d_transpose(x, W_flipped, ts, [1] + stride + [1], padding='VALID')
+
+    if shift == 'down':
+        return x[:,:(ts[1]-filter_size[0]+1),int((filter_size[1]-1)/2):(ts[2]-int((filter_size[1]-1)/2)),:]
+    elif shift == 'down_right':
+        return x[:,:(ts[1]-filter_size[0]+1),:(ts[2]-filter_size[1]+1),:]
+    elif shift == 'up':
+        return x[:, (filter_size[0] - 1):, int((filter_size[1] - 1) / 2):(ts[2] - int((filter_size[1] - 1) / 2)), :]
+    elif shift == 'up_left':
+        return x[:, (filter_size[0] - 1):, (filter_size[1] - 1):, :]
+    else:
+        raise ('shift= ' + str(shift) + ' is a not supported')
+
+
+''' layer definitions '''
+
+@add_arg_scope
+def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=False,
+          ema=None, weight_norm=True, use_b=True, use_g=True, **kwargs):
+    layer_name = get_name('dense', counters)
+    params = get_params(layer_name, x, init, ema, use_W=True, use_g=use_g, use_b=use_b,
+                        f=tf.matmul, weight_norm=weight_norm, init_scale=init_scale, num_units=num_units)
+
+    x = tf.matmul(x, params['W'])
+    if use_b:
+        x = tf.nn.bias_add(x, params['b'])
+    if nonlinearity is not None:
+        x = nonlinearity(x)
+    return x
+
+@add_arg_scope
+def conv2d(x, num_filters, filter_size=[3,3], stride=[1,1], shift=None, nonlinearity=None, init_scale=1.,
+           counters={}, init=False, ema=None, weight_norm=True, use_b=True, use_g=False, **kwargs):
+    layer_name = get_name('conv2d', counters)
+    f = lambda x,W: _conv2d(x, W, stride, shift)
+    params = get_params(layer_name, x, init, ema, use_W=True, use_g=use_g, use_b=use_b,
+                        f=f, weight_norm=weight_norm, init_scale=init_scale, filter_size=filter_size, num_units=num_filters)
+
+    x = f(x, params['W'])
+    if use_b:
+        x = tf.nn.bias_add(x, params['b'])
+    if nonlinearity is not None:
+        x = nonlinearity(x)
+    return x
+
+@add_arg_scope
+def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], shift=None, nonlinearity=None, init_scale=1.,
+             counters={}, init=False, ema=None, weight_norm=True, use_b=True, use_g=False,  **kwargs):
+    layer_name = get_name('deconv2d', counters)
+    f = lambda x, W: _deconv2d(x, W, stride, shift)
+    params = get_params(layer_name, x, init, ema, use_W=True, use_g=use_g, use_b=use_b,
+                        f=f, weight_norm=weight_norm, init_scale=init_scale, filter_size=filter_size, num_units=num_filters)
+
+    x = f(x, params['W'])
+    if use_b:
+        x = tf.nn.bias_add(x, params['b'])
+    if nonlinearity is not None:
+        x = nonlinearity(x)
+    return x
+
+@add_arg_scope
+def nin(x, num_units, **kwargs):
+    """ a network in network layer (1x1 CONV) """
+    sx = int_shape(x)
+    x = tf.reshape(x, [-1, sx[-1]])
+    x = dense(x, num_units, **kwargs)
+    return tf.reshape(x, [-1] + sx[1:-1] + [num_units])
+
+
+''' memory-efficient resnet layers '''
+mem_funcs = {}
+
+def my_bias_add(x, b, num_filters):
+    return x + tf.reshape(b, [1, 1, 1, num_filters])
+
+@add_arg_scope
+def resnet(x, nonlinearity=concat_elu, shift=None, filter_size=[3,3], dropout_p=0.,
+           save_memory=True, counters={}, init=False, ema=None, **kwargs):
+    layer_name1 = get_name('resnet_first_conv2d', counters)
+    layer_name2 = get_name('resnet_second_conv2d', counters)
     xs = int_shape(x)
-    return tf.concat(2,[tf.zeros([xs[0],xs[1],1,xs[3]]), x[:,:,:xs[2]-1,:]])
+    num_filters = int(xs[-1])
+    f = lambda x, W: _conv2d(x, W, stride=[1, 1], shift=shift, filter_size=filter_size)
+
+    if init:
+        x_res = nonlinearity(x)
+        params1 = get_params(layer_name1, x_res, init, ema, f=f, init_scale=1., filter_size=filter_size, num_units=num_filters)
+        x_res = nonlinearity(tf.nn.bias_add(f(x_res, params1['W']), params1['b']))
+        if dropout_p > 0:
+            x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+        params2 = get_params(layer_name2, x_res, init, ema, f=f, init_scale=0.1, filter_size=filter_size, num_units=num_filters)
+        x_res = tf.nn.bias_add(f(x_res, params2['W']), params2['b'])
+        return x + x_res
+
+    else:
+
+        f_name = (get_name('resnet_mem', counters) + str(xs)).replace(' ','_').replace('[','_').replace(']','_').replace(',','_')
+        if f_name in mem_funcs:
+            _resnet = mem_funcs[f_name]
+        else:
+            @tff.Defun(*([tf.float32] * 5), func_name=f_name)
+            def _resnet(x, W1, b1, W2, b2):
+                x_res = nonlinearity(my_bias_add(f(nonlinearity(x), W1), b1, num_filters))
+                if dropout_p > 0:
+                    x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+                x_res = my_bias_add(f(x_res, W2), b2, num_filters)
+                return x + x_res.set_shape(xs)
+
+            mem_funcs[f_name] = _resnet
+
+        params1 = get_params(layer_name1, ema=ema)
+        params2 = get_params(layer_name2, ema=ema)
+        y = _resnet(x, tf.convert_to_tensor(params1['W']), tf.convert_to_tensor(params1['b']),
+                       tf.convert_to_tensor(params2['W']), tf.convert_to_tensor(params2['b']))
+        y.set_shape(xs)
+        return y
 
 @add_arg_scope
-def down_shifted_conv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
-    x = tf.pad(x, [[0,0],[filter_size[0]-1,0], [int((filter_size[1]-1)/2),int((filter_size[1]-1)/2)],[0,0]])
-    return conv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
-
-@add_arg_scope
-def down_shifted_deconv2d(x, num_filters, filter_size=[2,3], stride=[1,1], **kwargs):
-    x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
+def gated_resnet(x, nonlinearity=concat_elu, shift=None, filter_size=[3,3], dropout_p=0.,
+           save_memory=True, counters={}, init=False, ema=None, **kwargs):
+    layer_name1 = get_name('gated_resnet_first_conv2d', counters)
+    layer_name2 = get_name('gated_resnet_second_conv2d', counters)
     xs = int_shape(x)
-    return x[:,:(xs[1]-filter_size[0]+1),int((filter_size[1]-1)/2):(xs[2]-int((filter_size[1]-1)/2)),:]
+    num_filters = int(xs[-1])
+    f = lambda x, W: _conv2d(x, W, stride=[1, 1], shift=shift, filter_size=filter_size)
+
+    if init:
+        x_res = nonlinearity(x)
+        params1 = get_params(layer_name1, x_res, init, ema, f=f, init_scale=1., filter_size=filter_size, num_units=num_filters)
+        x_res = nonlinearity(tf.nn.bias_add(f(x_res, params1['W']), params1['b']))
+        if dropout_p > 0:
+            x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+        params2 = get_params(layer_name2, x_res, init, ema, f=f, init_scale=0.1, filter_size=filter_size, num_units=2*num_filters)
+        x_res = tf.nn.bias_add(f(x_res, params2['W']), params2['b'])
+        return x + tf.nn.sigmoid(x_res[:,:,:,:num_filters])*x_res[:,:,:,num_filters:]
+
+    else:
+
+        f_name = (get_name('resnet_mem', counters) + str(xs)).replace(' ', '_').replace('[', '_').replace(']', '_').replace(',','_')
+        if f_name in mem_funcs:
+            _resnet = mem_funcs[f_name]
+        else:
+            @tff.Defun(*([tf.float32] * 5), func_name=f_name)
+            def _resnet(x, W1, b1, W2, b2):
+                x_res = nonlinearity(my_bias_add(f(nonlinearity(x), W1), b1, num_filters))
+                if dropout_p > 0:
+                    x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+                x_res = my_bias_add(f(x_res, W2), b2, 2*num_filters)
+                return x + tf.nn.sigmoid(x_res[:, :, :, :num_filters].set_shape(xs)) * x_res[:, :, :, num_filters:].set_shape(xs)
+
+            mem_funcs[f_name] = _resnet
+
+        params1 = get_params(layer_name1, ema=ema)
+        params2 = get_params(layer_name2, ema=ema)
+        y = _resnet(x, tf.convert_to_tensor(params1['W']), tf.convert_to_tensor(params1['b']),
+                       tf.convert_to_tensor(params2['W']), tf.convert_to_tensor(params2['b']))
+        y.set_shape(xs)
+        return y
+
+def _one_by_one_conv(x, W, xs=None, num_filters=None):
+    if xs is None:
+        xs = int_shape(x)
+    if num_filters is None:
+        num_filters = int_shape(W)[-1]
+    x = tf.reshape(x, [-1,xs[-1]])
+    x = tf.matmul(x, W)
+    return tf.reshape(x, [-1]+xs[1:-1]+[num_filters])
 
 @add_arg_scope
-def down_right_shifted_conv2d(x, num_filters, filter_size=[2,2], stride=[1,1], **kwargs):
-    x = tf.pad(x, [[0,0],[filter_size[0]-1, 0], [filter_size[1]-1, 0],[0,0]])
-    return conv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
-
-@add_arg_scope
-def down_right_shifted_deconv2d(x, num_filters, filter_size=[2,2], stride=[1,1], **kwargs):
-    x = deconv2d(x, num_filters, filter_size=filter_size, pad='VALID', stride=stride, **kwargs)
+def aux_gated_resnet(x, u, nonlinearity=concat_elu, shift=None, filter_size=[3,3], dropout_p=0.,
+           save_memory=True, counters={}, init=False, ema=None, **kwargs):
+    layer_name1 = get_name('aux_gated_resnet_nin', counters)
+    layer_name2 = get_name('aux_gated_resnet_first_conv2d', counters)
+    layer_name3 = get_name('aux_gated_resnet_second_conv2d', counters)
     xs = int_shape(x)
-    return x[:,:(xs[1]-filter_size[0]+1):,:(xs[2]-filter_size[1]+1),:]
+    us = int_shape(nonlinearity(u))
+    num_filters = int(xs[-1])
+    f = lambda x, W: _conv2d(x, W, stride=[1, 1], shift=shift, filter_size=filter_size)
+    f_nin = lambda u, W: _one_by_one_conv(u, W, us, num_filters)
+
+    if init:
+        x_res = nonlinearity(x)
+        u = nonlinearity(u)
+        params1 = get_params(layer_name1, u, init, ema, f=f_nin, init_scale=1., num_units=num_filters, use_b=False)
+        params2 = get_params(layer_name2, x_res, init, ema, f=f, init_scale=1., filter_size=filter_size, num_units=num_filters)
+        x_res = nonlinearity(tf.nn.bias_add(f_nin(u, params1['W']) + f(x_res, params2['W']), params2['b']))
+        if dropout_p > 0:
+            x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+        params3 = get_params(layer_name3, x_res, init, ema, f=f, init_scale=0.1, filter_size=filter_size, num_units=2*num_filters)
+        x_res = tf.nn.bias_add(f(x_res, params3['W']), params3['b'])
+        return x + tf.nn.sigmoid(x_res[:,:,:,:num_filters])*x_res[:,:,:,num_filters:]
+
+    else:
+
+        f_name = (get_name('resnet_mem', counters) + str(xs)).replace(' ', '_').replace('[', '_').replace(']', '_').replace(',','_')
+        if f_name in mem_funcs:
+            _resnet = mem_funcs[f_name]
+        else:
+            @tff.Defun(*([tf.float32] * 7), func_name=f_name)
+            def _resnet(x, u, W1, W2, b2, W3, b3):
+                x_res = nonlinearity(my_bias_add(f_nin(nonlinearity(u), W1) + f(nonlinearity(x), W2), b2, num_filters))
+                if dropout_p > 0:
+                    x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
+                x_res = my_bias_add(f(x_res, W3), b3, 2*num_filters)
+                return x + tf.nn.sigmoid(x_res[:, :, :, :num_filters]).set_shape(xs) * x_res[:, :, :, num_filters:].set_shape(xs)
+
+            mem_funcs[f_name] = _resnet
+
+        params1 = get_params(layer_name1, ema=ema, use_b=False)
+        params2 = get_params(layer_name2, ema=ema)
+        params3 = get_params(layer_name3, ema=ema)
+        y = _resnet(x, u, tf.convert_to_tensor(params1['W']), tf.convert_to_tensor(params2['W']),
+                       tf.convert_to_tensor(params2['b']), tf.convert_to_tensor(params3['W']), tf.convert_to_tensor(params3['b']))
+        y.set_shape(xs)
+        return y
