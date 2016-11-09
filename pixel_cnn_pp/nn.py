@@ -408,7 +408,8 @@ def gated_resnet(x, nonlinearity=concat_elu, shift=None, filter_size=[3,3], drop
                 if dropout_p > 0:
                     x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
                 x_res = my_bias_add(f(x_res, W2), b2, 2*num_filters)
-                return x + tf.nn.sigmoid(x_res[:, :, :, :num_filters].set_shape(xs)) * x_res[:, :, :, num_filters:].set_shape(xs)
+                a, b = tf.split(3, 2, x_res)
+                return x + tf.nn.sigmoid(a) * b
 
             mem_funcs[f_name] = _resnet
 
@@ -464,7 +465,8 @@ def aux_gated_resnet(x, u, nonlinearity=concat_elu, shift=None, filter_size=[3,3
                 if dropout_p > 0:
                     x_res = tf.nn.dropout(x_res, keep_prob=1. - dropout_p)
                 x_res = my_bias_add(f(x_res, W3), b3, 2*num_filters)
-                return x + tf.nn.sigmoid(x_res[:, :, :, :num_filters]).set_shape(xs) * x_res[:, :, :, num_filters:].set_shape(xs)
+                a, b = tf.split(3, 2, x_res)
+                return x + tf.nn.sigmoid(a) * b
 
             mem_funcs[f_name] = _resnet
 
