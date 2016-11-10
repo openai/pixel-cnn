@@ -70,7 +70,7 @@ class DataLoader(object):
         # create temporary storage for the data, if not yet created
         if not os.path.exists(data_dir):
             print('creating folder', data_dir)
-            of.makedirs(data_dir)
+            os.makedirs(data_dir)
 
         # load CIFAR-10 training data to RAM
         self.data, labels = load(os.path.join(data_dir,'cifar-10-python'), subset=subset)

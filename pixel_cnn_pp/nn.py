@@ -9,6 +9,11 @@ from pixel_cnn_pp.scopes import add_arg_scope
 def int_shape(x):
     return list(map(int, x.get_shape()))
 
+def concat_elu(x):
+    """ like concatenated ReLU (http://arxiv.org/abs/1603.05201), but then with ELU """
+    axis = len(x.get_shape())-1
+    return tf.nn.elu(tf.concat(axis, [x, -x]))
+
 def log_sum_exp(x):
     """ numerically stable log_sum_exp implementation that prevents overflow """
     axis = len(x.get_shape())-1
@@ -253,30 +258,32 @@ def nin(x, num_units, **kwargs):
 ''' meta-layers consisting of multiple base layers '''
 
 @add_arg_scope
-def resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, **kwargs):
+def resnet(x, nonlinearity=concat_elu, conv=conv2d, **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
     c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1)
     return x+c2
 
 @add_arg_scope
-def gated_resnet(x, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
+def gated_resnet(x, nonlinearity=concat_elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
     if dropout_p > 0:
         c1 = tf.nn.dropout(c1, keep_prob=1. - dropout_p)
     c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
-    return x+c3
+    a, b = tf.split(3, 2, c2)
+    c3 = a * tf.nn.sigmoid(b)
+    return x + c3
 
 @add_arg_scope
-def aux_gated_resnet(x, u, nonlinearity=tf.nn.elu, conv=conv2d, dropout_p=0., **kwargs):
+def aux_gated_resnet(x, u, nonlinearity=concat_elu, conv=conv2d, dropout_p=0., **kwargs):
     num_filters = int(x.get_shape()[-1])
     c1 = nonlinearity(conv(nonlinearity(x), num_filters, nonlinearity=None) + nin(nonlinearity(u), num_filters, nonlinearity=None))
     if dropout_p>0:
         c1 = tf.nn.dropout(c1, keep_prob=1.-dropout_p)
     c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
-    c3 = tf.tanh(c2[:,:,:,:num_filters]) * tf.nn.sigmoid(c2[:,:,:,num_filters:])
+    a, b = tf.split(3, 2, c2)
+    c3 = a * tf.nn.sigmoid(b)
     return x+c3
 
 ''' utilities for shifting the image around, efficient alternative to masking convolutions '''
