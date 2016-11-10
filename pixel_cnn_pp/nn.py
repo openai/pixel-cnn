@@ -258,30 +258,63 @@ def nin(x, num_units, **kwargs):
 ''' meta-layers consisting of multiple base layers '''
 
 @add_arg_scope
-def resnet(x, nonlinearity=concat_elu, conv=conv2d, **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
-    c2 = nin(c1, num_filters, nonlinearity=None, init_scale=0.1)
-    return x+c2
+def gated_resnet(x, h=None, nonlinearity=concat_elu, conv=conv2d, init=False, counters={}, dropout_p=0., **kwargs):
+    xs = int_shape(x)
+    num_filters = xs[-1]
 
-@add_arg_scope
-def gated_resnet(x, nonlinearity=concat_elu, conv=conv2d, dropout_p=0., **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = conv(nonlinearity(x), num_filters, nonlinearity=nonlinearity)
+    # add projection of h vector if included: conditional generation
+    if h is not None:
+        with tf.variable_scope(get_name('conditional_bias', counters)):
+            hw1 = get_var_maybe_avg('hw1', ema, shape=[int_shape(h)[-1], num_filters], dtype=tf.float32,
+                                    initializer=tf.random_normal_initializer(0, 0.05), trainable=True)
+            hw2 = get_var_maybe_avg('hw2', ema, shape=[int_shape(h)[-1], 2 * num_filters], dtype=tf.float32,
+                                    initializer=tf.random_normal_initializer(0, 0.05), trainable=True)
+        if init:
+            hw1 = hw1.initialized_value()
+            hw2 = hw2.initialized_value()
+        bias1 = tf.reshape(tf.matmul(h, hw1), [xs[0], 1, 1, num_filters])
+        bias2 = tf.reshape(tf.matmul(h, hw2), [xs[0], 1, 1, 2 * num_filters])
+
+    c1 = conv(nonlinearity(x), num_filters)
+    if h is not None:
+        c1 += bias1
+    c1 = nonlinearity(c1)
     if dropout_p > 0:
         c1 = tf.nn.dropout(c1, keep_prob=1. - dropout_p)
-    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
+    c2 = conv(c1, num_filters*2, init_scale=0.1)
+    if h is not None:
+        c2 += bias2
     a, b = tf.split(3, 2, c2)
     c3 = a * tf.nn.sigmoid(b)
     return x + c3
 
 @add_arg_scope
-def aux_gated_resnet(x, u, nonlinearity=concat_elu, conv=conv2d, dropout_p=0., **kwargs):
-    num_filters = int(x.get_shape()[-1])
-    c1 = nonlinearity(conv(nonlinearity(x), num_filters, nonlinearity=None) + nin(nonlinearity(u), num_filters, nonlinearity=None))
+def aux_gated_resnet(x, u, h=None, nonlinearity=concat_elu, conv=conv2d, init=False, counters={}, dropout_p=0., **kwargs):
+    xs = int_shape(x)
+    num_filters = xs[-1]
+
+    # add projection of h vector if included: conditional generation
+    if h is not None:
+        with tf.variable_scope(get_name('conditional_bias', counters)):
+            hw1 = get_var_maybe_avg('hw1', ema, shape=[int_shape(h)[-1], num_filters], dtype=tf.float32,
+                                    initializer=tf.random_normal_initializer(0, 0.05), trainable=True)
+            hw2 = get_var_maybe_avg('hw2', ema, shape=[int_shape(h)[-1], 2 * num_filters], dtype=tf.float32,
+                                    initializer=tf.random_normal_initializer(0, 0.05), trainable=True)
+        if init:
+            hw1 = hw1.initialized_value()
+            hw2 = hw2.initialized_value()
+        bias1 = tf.reshape(tf.matmul(h, hw1), [xs[0], 1, 1, num_filters])
+        bias2 = tf.reshape(tf.matmul(h, hw2), [xs[0], 1, 1, 2 * num_filters])
+
+    c1 = conv(nonlinearity(x), num_filters) + nin(nonlinearity(u), num_filters)
+    if h is not None:
+        c1 += bias1
+    c1 = nonlinearity(c1)
     if dropout_p>0:
         c1 = tf.nn.dropout(c1, keep_prob=1.-dropout_p)
-    c2 = conv(c1, num_filters*2, nonlinearity=None, init_scale=0.1)
+    c2 = conv(c1, num_filters*2, init_scale=0.1)
+    if h is not None:
+        c2 += bias2
     a, b = tf.split(3, 2, c2)
     c3 = a * tf.nn.sigmoid(b)
     return x+c3
