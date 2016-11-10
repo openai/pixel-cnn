@@ -159,7 +159,7 @@ with tf.Session() as sess:
             lr *= args.lr_decay
             feed_dict = { tf_lr: lr }
             feed_dict.update({ xs[i]: xfs[i] for i in range(args.nr_gpu) })
-            l,_ = sess.run([bits_per_dim, optimizer], feed_dict)
+            l,_ = sess.run([bits_per_dim, optimizer, maintain_averages_op], feed_dict)
             train_losses.append(l)
         train_loss_gen = np.mean(train_losses)
 
