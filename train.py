@@ -138,7 +138,7 @@ def sample_from_model(sess):
             new_x_gen_np = sess.run(new_x_gen, {xs[i]: x_gen[i] for i in range(args.nr_gpu)})
             for i in range(args.nr_gpu):
                 x_gen[i][:,yi,xi,:] = new_x_gen_np[i][:,yi,xi,:]
-    return np.concat(x_gen, axis=0)
+    return np.concatenate(x_gen, axis=0)
 
 # init & save
 initializer = tf.initialize_all_variables()
