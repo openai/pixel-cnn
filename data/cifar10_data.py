@@ -55,7 +55,7 @@ def load(data_dir, subset='train'):
 class DataLoader(object):
     """ an object that generates batches of CIFAR-10 data for training """
 
-    def __init__(self, data_dir, subset, batch_size, rng=None, shuffle=False):
+    def __init__(self, data_dir, subset, batch_size, rng=None, shuffle=False, return_labels=False):
         """ 
         - data_dir is location where to store files
         - subset is train|test 
@@ -66,6 +66,7 @@ class DataLoader(object):
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.return_labels = return_labels
 
         # create temporary storage for the data, if not yet created
         if not os.path.exists(data_dir):
@@ -73,7 +74,7 @@ class DataLoader(object):
             os.makedirs(data_dir)
 
         # load CIFAR-10 training data to RAM
-        self.data, labels = load(os.path.join(data_dir,'cifar-10-python'), subset=subset)
+        self.data, self.labels = load(os.path.join(data_dir,'cifar-10-python'), subset=subset)
         self.data = np.transpose(self.data, (0,2,3,1)) # (N,3,32,32) -> (N,32,32,3)
         
         self.p = 0 # pointer to where we are in iteration
@@ -81,6 +82,9 @@ class DataLoader(object):
 
     def get_observation_size(self):
         return self.data.shape[1:]
+
+    def get_num_labels(self):
+        return np.amax(self.labels) + 1
 
     def reset(self):
         self.p = 0
@@ -96,6 +100,7 @@ class DataLoader(object):
         if self.p == 0 and self.shuffle:
             inds = self.rng.permutation(self.data.shape[0])
             self.data = self.data[inds]
+            self.labels = self.labels[inds]
 
         # on last iteration reset the counter and raise StopIteration
         if self.p + n > self.data.shape[0]:
@@ -104,9 +109,13 @@ class DataLoader(object):
 
         # on intermediate iterations fetch the next batch
         x = self.data[self.p : self.p + n]
+        y = self.labels[self.p : self.p + n]
         self.p += self.batch_size
 
-        return x
+        if self.return_labels:
+            return x,y
+        else:
+            return x
 
     next = __next__  # Python 2 compatibility (https://stackoverflow.com/questions/29578469/how-to-make-an-object-both-a-python2-and-python3-iterator)
 

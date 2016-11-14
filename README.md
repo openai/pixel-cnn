@@ -55,10 +55,6 @@ the flag `--nr_gpu` accordingly.
 in the `data/` folder. You have to write an analogous data iterator object for
 your own dataset and the code should work well from there.
 
-## FAQ
-
-**Is the conditional code included?** Not right now, but we plan to add it.
-
 ## Citation
 
 If you find this code useful please cite us in your work:
