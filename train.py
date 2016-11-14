@@ -146,9 +146,8 @@ saver = tf.train.Saver()
 
 # turn numpy inputs into feed_dict for use with tensorflow
 def make_feed_dict(data, init=False):
-    if data is tuple:
-        x = data[0]
-        y = data[1]
+    if type(data) is tuple:
+        x,y = data
     else:
         x = data
         y = None
@@ -178,7 +177,7 @@ with tf.Session() as sess:
         # init
         if epoch == 0:
             feed_dict = make_feed_dict(train_data.next(args.init_batch_size), init=True) # manually retrieve exactly init_batch_size examples
-            data_set.reset()  # rewind the iterator back to 0 to do one full epoch
+            train_data.reset()  # rewind the iterator back to 0 to do one full epoch
             sess.run(initializer, feed_dict)
             print('initializing the model...')
             if args.load_params:
