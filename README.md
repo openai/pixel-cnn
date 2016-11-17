@@ -2,7 +2,7 @@
 # pixel-cnn++
 
 This is a Python3 / [Tensorflow](https://www.tensorflow.org/) implementation 
-of [PixelCNN++](http://104.155.136.4:3000/pdf?id=BJrFC6ceg), as described in the following 
+of [PixelCNN++](https://openreview.net/pdf?id=BJrFC6ceg), as described in the following 
 paper:
 
 **PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications, by
