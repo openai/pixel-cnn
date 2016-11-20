@@ -5,7 +5,7 @@ This is a Python3 / [Tensorflow](https://www.tensorflow.org/) implementation
 of [PixelCNN++](https://openreview.net/pdf?id=BJrFC6ceg), as described in the following 
 paper:
 
-**PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications, by
+**PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications**, by
 Tim Salimans, Andrej Karpathy, Xi Chen, Diederik P. Kingma, and Yaroslav Bulatov.
 
 Our work builds on PixelCNNs that were originally proposed in [van der Oord et al.](https://arxiv.org/abs/1606.05328) 
