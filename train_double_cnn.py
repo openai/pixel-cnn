@@ -10,6 +10,7 @@ import plotting
 import cifar10_data
 sys.setrecursionlimit(10000)
 
+
 # settings
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=1)
@@ -32,7 +33,6 @@ parser.add_argument('--polyak_decay', type=float, default=0.9995)
 args = parser.parse_args()
 print(args)
 
-
 # fix random seed
 rng = np.random.RandomState(args.seed)
 tf.set_random_seed(args.seed)
@@ -46,8 +46,8 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         xs = nn.int_shape(x)
         x_pad = tf.concat(3,[x,tf.ones(xs[:-1]+[1])]) # add channel of ones to distinguish image from padding later on
         u_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 3]))] # stream for pixels above
-        ul_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[1,3])) + \
-                   nn.right_shift(nn.down_right_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2,1]))] # stream for up and to the left
+        ul_list = [nn.down_shift(nn.down_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 3])) + \
+                   nn.right_shift(nn.down_right_shifted_conv2d(x_pad, num_filters=args.nr_filters, filter_size=[2, 1]))] # stream for up and to the left
         
         for rep in range(args.nr_resnet):
             u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
@@ -55,18 +55,18 @@ def model_spec(x, init=False, ema=None, dropout_p=args.dropout_p):
         
         u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
         ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-
+        
         for rep in range(args.nr_resnet):
             u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
             ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
 
         u_list.append(nn.down_shifted_conv2d(u_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
         ul_list.append(nn.down_right_shifted_conv2d(ul_list[-1], num_filters=args.nr_filters, stride=[2, 2]))
-
+        
         for rep in range(args.nr_resnet):
             u_list.append(nn.gated_resnet(u_list[-1], conv=nn.down_shifted_conv2d))
             ul_list.append(nn.aux_gated_resnet(ul_list[-1], u_list[-1], conv=nn.down_right_shifted_conv2d))
-
+        
         # /////// down pass ////////
         u = u_list.pop()
         ul = ul_list.pop()
@@ -212,7 +212,7 @@ with tf.Session() as sess:
         if epoch==0:
             sess.run(initializer,{x_init: scale_x(trainx[:args.init_batch_size])})
             if args.load_params:
-                saver.restore(sess, args.save_dir + '/params_' + args.data_set + '.ckpt')
+                saver.restore(sess, args.load_dir + '/params_' + args.data_set + '.ckpt')
 
         # train
         train_loss_gen = 0.
@@ -247,11 +247,13 @@ with tf.Session() as sess:
 
             # generate samples from the model
             sample_x = sample_from_model(sess)
-            img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
-            img = plotting.plot_img(img_tile, title='CIFAR10 samples')
-            plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
-            plotting.plt.close('all')
-
+            #img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
+            #img = plotting.plot_img(img_tile, title='CIFAR10 samples')
+            #plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
+            #plotting.plt.close('all')
+            import graphics
+            graphics.save_raster(sample_x, logpath + '/cifar10_sample' + str(epoch) + '.png')
+            
             # save params
             saver.save(sess, args.save_dir + '/params_' + args.data_set + '.ckpt')
             np.savez(args.save_dir + '/test_bpd_' + args.data_set + '.npz', test_bpd=np.array(test_bpd))
