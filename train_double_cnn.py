@@ -247,13 +247,11 @@ with tf.Session() as sess:
 
             # generate samples from the model
             sample_x = sample_from_model(sess)
-            #img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
-            #img = plotting.plot_img(img_tile, title='CIFAR10 samples')
-            #plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
-            #plotting.plt.close('all')
-            import graphics
-            graphics.save_raster(sample_x, logpath + '/cifar10_sample' + str(epoch) + '.png')
-            
+            img_tile = plotting.img_tile(sample_x, aspect_ratio=1.0, border_color=1.0, stretch=True)
+            img = plotting.plot_img(img_tile, title='CIFAR10 samples')
+            plotting.plt.savefig(args.save_dir + '/cifar10_sample' + str(epoch) + '.png')
+            plotting.plt.close('all')
+
             # save params
             saver.save(sess, args.save_dir + '/params_' + args.data_set + '.ckpt')
             np.savez(args.save_dir + '/test_bpd_' + args.data_set + '.npz', test_bpd=np.array(test_bpd))
