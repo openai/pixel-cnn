@@ -8,6 +8,7 @@ data_dir = '/home/tim/data'
 parser = argparse.ArgumentParser()
 parser.add_argument('--save_dir', type=str, default='./log')
 parser.add_argument('--data_dir', type=str, default='/home/tim/data')
+parser.add_argument('--plot_title', type=str, default=None)
 args = parser.parse_args()
 print(args)
 
@@ -29,7 +30,7 @@ for i in range(len(ids)):
 print(ids)
 
 img_tile = plotting.img_tile(images, aspect_ratio=1.0, border_color=1.0, stretch=True)
-img = plotting.plot_img(img_tile, title='samples from CIFAR10 dataset')
+img = plotting.plot_img(img_tile, title=args.plot_title if args.plot_title != 'None' else None)
 plotting.plt.savefig(args.save_dir + '/cifar10_orig_images.png')
 plotting.plt.close('all')
 
