@@ -55,6 +55,10 @@ the flag `--nr_gpu` accordingly.
 in the `data/` folder. You have to write an analogous data iterator object for
 your own dataset and the code should work well from there.
 
+## Pretrained model checkpoint
+
+You can download our pretrained (TensorFlow) model that achieves 2.92 bpd on CIFAR-10 [here](http://alpha.openai.com/pxpp.zip) (656MB).
+
 ## Citation
 
 If you find this code useful please cite us in your work:
