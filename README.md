@@ -32,7 +32,10 @@ To run this code you need the following:
 
 - a machine with multiple GPUs
 - Python3
-- Numpy, TensorFlow
+- Numpy, TensorFlow and imageio packages:
+```
+pip install numpy tensorflow-gpu imageio
+```
 
 ## Training the model
 

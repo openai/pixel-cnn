@@ -12,7 +12,7 @@ import tarfile
 from six.moves import urllib
 
 import numpy as np
-from scipy.misc import imread
+from imageio import imread
 
 def fetch(url, filepath):
     filename = url.split('/')[-1]
