@@ -67,10 +67,10 @@ You can download our pretrained (TensorFlow) model that achieves 2.92 bpd on CIF
 If you find this code useful please cite us in your work:
 
 ```
-@inproceedings{Salimans2016PixeCNN,
+@inproceedings{Salimans2017PixeCNN,
   title={PixelCNN++: A PixelCNN Implementation with Discretized Logistic Mixture Likelihood and Other Modifications},
-  author={Tim Salimans and Andrej Karpathy and Xi Chen and Diederik P. Kingma and Yaroslav Bulatov},
-  booktitle={Submitted to ICLR 2017},
-  year={2016}
+  author={Tim Salimans and Andrej Karpathy and Xi Chen and Diederik P. Kingma},
+  booktitle={ICLR},
+  year={2017}
 }
 ```

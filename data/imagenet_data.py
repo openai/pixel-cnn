@@ -87,7 +87,7 @@ def load(data_dir, subset='train'):
 class DataLoader(object):
     """ an object that generates batches of CIFAR-10 data for training """
 
-    def __init__(self, data_dir, subset, batch_size, rng=None, shuffle=False):
+    def __init__(self, data_dir, subset, batch_size, rng=None, shuffle=False, **kwargs):
         """ 
         - data_dir is location where the files are stored
         - subset is train|test 
