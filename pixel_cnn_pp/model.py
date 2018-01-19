@@ -58,7 +58,7 @@ def model_spec(x, h=None, init=False, ema=None, dropout_p=0.5, nr_resnet=5, nr_f
 
             # remember nodes
             for t in u_list+ul_list:
-                tf.add_to_collection('remember', t)
+                tf.add_to_collection('checkpoints', t)
 
             # /////// down pass ////////
             u = u_list.pop()
@@ -66,8 +66,8 @@ def model_spec(x, h=None, init=False, ema=None, dropout_p=0.5, nr_resnet=5, nr_f
             for rep in range(nr_resnet):
                 u = nn.gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
                 ul = nn.gated_resnet(ul, tf.concat([u, ul_list.pop()],3), conv=nn.down_right_shifted_conv2d)
-                tf.add_to_collection('remember', u)
-                tf.add_to_collection('remember', ul)
+                tf.add_to_collection('checkpoints', u)
+                tf.add_to_collection('checkpoints', ul)
 
             u = nn.down_shifted_deconv2d(u, num_filters=nr_filters, stride=[2, 2])
             ul = nn.down_right_shifted_deconv2d(ul, num_filters=nr_filters, stride=[2, 2])
@@ -75,8 +75,8 @@ def model_spec(x, h=None, init=False, ema=None, dropout_p=0.5, nr_resnet=5, nr_f
             for rep in range(nr_resnet+1):
                 u = nn.gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
                 ul = nn.gated_resnet(ul, tf.concat([u, ul_list.pop()],3), conv=nn.down_right_shifted_conv2d)
-                tf.add_to_collection('remember', u)
-                tf.add_to_collection('remember', ul)
+                tf.add_to_collection('checkpoints', u)
+                tf.add_to_collection('checkpoints', ul)
 
             u = nn.down_shifted_deconv2d(u, num_filters=nr_filters, stride=[2, 2])
             ul = nn.down_right_shifted_deconv2d(ul, num_filters=nr_filters, stride=[2, 2])
@@ -84,8 +84,8 @@ def model_spec(x, h=None, init=False, ema=None, dropout_p=0.5, nr_resnet=5, nr_f
             for rep in range(nr_resnet+1):
                 u = nn.gated_resnet(u, u_list.pop(), conv=nn.down_shifted_conv2d)
                 ul = nn.gated_resnet(ul, tf.concat([u, ul_list.pop()],3), conv=nn.down_right_shifted_conv2d)
-                tf.add_to_collection('remember', u)
-                tf.add_to_collection('remember', ul)
+                tf.add_to_collection('checkpoints', u)
+                tf.add_to_collection('checkpoints', ul)
 
             if energy_distance:
                 f = nn.nin(tf.nn.elu(ul), 64)
