@@ -177,7 +177,7 @@ def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=Fals
             m_init, v_init = tf.nn.moments(x, [0])
             scale_init = init_scale/tf.sqrt(v_init + 1e-10)
             with tf.control_dependencies([g.assign(g*scale_init), b.assign_add(-m_init*scale_init)]):
-                x = tf.nn.l2_normalize(x, axis=0)
+                x = tf.identity(x)
 
         # apply nonlinearity
         if nonlinearity is not None:
@@ -207,7 +207,7 @@ def conv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlinea
             m_init, v_init = tf.nn.moments(x, [0,1,2])
             scale_init = init_scale / tf.sqrt(v_init + 1e-10)
             with tf.control_dependencies([g.assign(g * scale_init), b.assign_add(-m_init * scale_init)]):
-                x = tf.nn.l2_normalize(x, axis=[0,1,2])
+                x = tf.identity(x)
 
         # apply nonlinearity
         if nonlinearity is not None:
@@ -243,7 +243,7 @@ def deconv2d(x, num_filters, filter_size=[3,3], stride=[1,1], pad='SAME', nonlin
             m_init, v_init = tf.nn.moments(x, [0,1,2])
             scale_init = init_scale / tf.sqrt(v_init + 1e-10)
             with tf.control_dependencies([g.assign(g * scale_init), b.assign_add(-m_init * scale_init)]):
-                x = tf.nn.l2_normalize(x, axis=[0,1,2])
+                x = tf.identity(x)
 
         # apply nonlinearity
         if nonlinearity is not None:
